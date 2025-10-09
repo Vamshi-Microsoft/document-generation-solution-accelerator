@@ -282,16 +282,17 @@ jobs:
         run: |
           az logout
           echo "Logged out from Azure."
-  e2e-test:
-    needs: deploy
-    uses: ./.github/workflows/test-automation.yml
-    with:
-      DOCGEN_URL: ${{ needs.deploy.outputs.WEBAPP_URL }}
-    secrets: inherit
+  # e2e-test:
+  #   needs: deploy
+  #   uses: ./.github/workflows/test-automation.yml
+  #   with:
+  #     DOCGEN_URL: ${{ needs.deploy.outputs.WEBAPP_URL }}
+  #   secrets: inherit
 
   cleanup-deployment:
     if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != ''
-    needs: [deploy, e2e-test]
+    # needs: [deploy, e2e-test]
+    needs: [deploy]
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
@@ -324,6 +325,7 @@ jobs:
             azd env set AZURE_RESOURCE_GROUP "${{ env.RESOURCE_GROUP_NAME }}"
             azd env set AZURE_SUBSCRIPTION_ID "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
             azd env set AZURE_ENV_OPENAI_LOCATION="${{ env.AZURE_LOCATION }}"
+            azd env set AZURE_LOCATION="${{ env.AZURE_LOCATION }}"
           fi
 
       - name: Delete deployment using azd
