@@ -47,11 +47,6 @@ jobs:
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
           az --version  # Verify installation
 
-      - name: Login to Azure
-        run: |
-          azd auth login --client-id ${{ secrets.AZURE_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CLIENT_SECRET }} --tenant-id ${{ secrets.AZURE_TENANT_ID }}
-          azd config set defaults.subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Run Quota Check
         id: quota-check
         run: |
@@ -91,9 +86,6 @@ jobs:
       - name: Fail Pipeline if Quota Check Fails
         if: env.QUOTA_FAILED == 'true'
         run: exit 1
-
-      - name: Install Bicep CLI
-        run: az bicep install
       
       - name: Set Deployment Region
         run: |
@@ -114,6 +106,27 @@ jobs:
           echo "RESOURCE_GROUP_NAME=${UNIQUE_RG_NAME}" >> $GITHUB_ENV
           echo "Generated RESOURCE_GROUP_NAME: ${UNIQUE_RG_NAME}"
       
+      
+
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version  # Verify installation
+
+      - name: Setup Azure Developer CLI
+        run: |
+          curl -fsSL https://aka.ms/install-azd.sh | sudo bash
+          azd version           
+
+      - name: Login to Azure
+        id: login-azure
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+          azd auth login --client-id ${{ secrets.AZURE_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CLIENT_SECRET }} --tenant-id ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
       - name: Check and Create Resource Group
         id: check_create_rg
         run: |
