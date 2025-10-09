@@ -96,8 +96,10 @@ jobs:
           echo "Selected Region: $VALID_REGION"
           echo "AZURE_AI_LOCATION=$VALID_REGION" >> $GITHUB_ENV
           echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
+          echo "AZURE_LOCATION=${AZURE_LOCATION}" >> $GITHUB_OUTPUT
           if [ "$VALID_REGION" == "eastus" ] || [ "$VALID_REGION" == "westus3" ]; then
             echo "AZURE_LOCATION=uksouth" >> $GITHUB_ENV
+            echo "AZURE_LOCATION=uksouth" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate Resource Group Name
