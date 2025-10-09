@@ -38,6 +38,9 @@ jobs:
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
       WEBAPP_URL: ${{ steps.get_output.outputs.WEBAPP_URL }}
+      ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
+      AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
+      
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -88,6 +91,7 @@ jobs:
         run: exit 1
       
       - name: Set Deployment Region
+        id: set_region
         run: |
           echo "Selected Region: $VALID_REGION"
           echo "AZURE_AI_LOCATION=$VALID_REGION" >> $GITHUB_ENV
@@ -278,8 +282,6 @@ jobs:
         run: |
           az logout
           echo "Logged out from Azure."
-
-  
   e2e-test:
     needs: deploy
     uses: ./.github/workflows/test-automation.yml
