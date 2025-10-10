@@ -1,4 +1,4 @@
-name: Deploy-Test-Cleanup (Non-Waf)
+name: Deploy-Test-Cleanup (Non-Waf EXP)
 
 on:
   push:
@@ -205,8 +205,8 @@ jobs:
           azd env set AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_ENV_OPENAI_LOCATION="${{ env.AZURE_LOCATION }}"
           azd env set AZURE_RESOURCE_GROUP="${{ env.RESOURCE_GROUP_NAME }}"
-          azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_WORKSPACE_RID }}"
-          azd env set AZURE_ENV_FOUNDRY_PROJECT_ID="${{ secrets.EXP_AIF_PROJ_RID }}"
+          azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
+          azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
 
           # Deploy using azd up
           azd up --no-prompt
