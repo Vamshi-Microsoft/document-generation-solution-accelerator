@@ -1,4 +1,4 @@
-name: Deploy-Test-Cleanup (Non-Waf)
+name: Deploy-Test-Cleanup (Waf)
 
 on:
   push:

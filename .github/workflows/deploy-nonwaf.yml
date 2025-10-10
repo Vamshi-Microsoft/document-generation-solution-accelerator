@@ -2,8 +2,8 @@ name: Deploy-Test-Cleanup (Non-Waf)
 
 on:
   push:
-    branches:
-      - deploy-azd-waf
+    # branches:
+    #   - deploy-azd-waf
   workflow_run:
     workflows: ["Build Docker and Optional Push - Client Advisor"]
     types:
