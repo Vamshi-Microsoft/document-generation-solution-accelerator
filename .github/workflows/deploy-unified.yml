@@ -19,11 +19,8 @@ on:
       cleanup_resources:
         description: 'Cleanup deployed resources'
         required: false
-        default: true
+        default: false
         type: boolean
-  schedule:
-    - cron: "0 6,18 * * *" # Runs at 6:00 AM and 6:00 PM GMT
-
 env:
   GPT_MIN_CAPACITY: 150
   TEXT_EMBEDDING_MIN_CAPACITY: 80
@@ -41,13 +38,39 @@ jobs:
       ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
     env:
-      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
+      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
       EXP: ${{ github.event.inputs.EXP || false }}
       CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Debug - WAF/EXP/Cleanup Parameters
+        run: |
+          echo "=== DEBUGGING: WAF/EXP/Cleanup Parameters ==="
+          echo "Event type: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "Raw GitHub Event Inputs:"
+          echo "  github.event.inputs.waf_enabled: '${{ github.event.inputs.waf_enabled }}'"
+          echo "  github.event.inputs.EXP: '${{ github.event.inputs.EXP }}'"
+          echo "  github.event.inputs.cleanup_resources: '${{ github.event.inputs.cleanup_resources }}'"
+          echo ""
+          echo "Global Environment Variables (with defaults):"
+          echo "  WAF_ENABLED (global): '${{ env.WAF_ENABLED }}'"
+          echo "  EXP (global): '${{ env.EXP }}'"
+          echo "  CLEANUP_RESOURCES (global): '${{ env.CLEANUP_RESOURCES }}'"
+          echo ""
+          echo "Job-level Environment Variables (with different defaults):"
+          echo "  WAF_ENABLED (job): '${{ env.WAF_ENABLED }}' (should be true for push events)"
+          echo "  EXP (job): '${{ env.EXP }}' (should be false)"
+          echo "  CLEANUP_RESOURCES (job): '${{ env.CLEANUP_RESOURCES }}' (should be true)"
+          echo ""
+          echo "Logic Evaluation Tests:"
+          echo "  WAF test [[ '${{ env.WAF_ENABLED }}' == 'true' ]]: $(if [[ '${{ env.WAF_ENABLED }}' == 'true' ]]; then echo 'TRUE - WAF WILL BE ENABLED'; else echo 'FALSE - WAF WILL BE DISABLED'; fi)"
+          echo "  EXP test [[ '${{ env.EXP }}' == 'true' ]]: $(if [[ '${{ env.EXP }}' == 'true' ]]; then echo 'TRUE - EXP WILL BE ENABLED'; else echo 'FALSE - EXP WILL BE DISABLED'; fi)"
+          echo "=== END DEBUG SECTION ==="
 
       - name: Setup Azure CLI
         run: |
@@ -69,23 +92,30 @@ jobs:
           if ! scripts/checkquota.sh; then
             # If quota check fails due to insufficient quota, set the flag
             if grep -q "No region with sufficient quota found" scripts/checkquota.sh; then
-              echo "quota_failed=true" >> $GITHUB_OUTPUT
+              echo "QUOTA_FAILED=true" >> $GITHUB_ENV
+            fi
+            exit 1  # Fail the pipeline if any other failure occurs
+          fi
               
-              # Send notification
-              RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-              EMAIL_BODY=$(cat <<EOF
+
+      - name: Send Notification on Quota Failure
+        if: env.QUOTA_FAILED == 'true'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EMAIL_BODY=$(cat <<EOF
           {
             "body": "<p>Dear Team,</p><p>The quota check has failed, and the pipeline cannot proceed.</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please take necessary action.</p><p>Best regards,<br>Your Automation Team</p>"
           }
           EOF
-              )
+          )
 
-              curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
-                -H "Content-Type: application/json" \
-                -d "$EMAIL_BODY" || echo "Failed to send notification"
-            fi
-            exit 1  # Fail the pipeline if any other failure occurs
-          fi
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send notification"
+
+      - name: Fail Pipeline if Quota Check Fails
+        if: env.QUOTA_FAILED == 'true'
+        run: exit 1
       
       - name: Set Deployment Region
         id: set_region
@@ -152,22 +182,10 @@ jobs:
         id: determine_tag
         run: |
           BRANCH=${{ github.ref_name }}
-          WAF_MODE="${{ env.WAF_ENABLED }}"
-          if [[ "$BRANCH" == "main" ]]; then 
-            if [[ "$WAF_MODE" == "true" ]]; then
-              TAG="latest_waf"
-            else
-              TAG="latest_Non-waf"
-            fi
+          if [[ "$BRANCH" == "main" ]]; then TAG="latest_waf"
           elif [[ "$BRANCH" == "dev" ]]; then TAG="dev"
           elif [[ "$BRANCH" == "demo" ]]; then TAG="demo"
-          else 
-            if [[ "$WAF_MODE" == "true" ]]; then
-              TAG="latest_waf"
-            else
-              TAG="latest_Non-waf"
-            fi
-          fi
+          else TAG="latest_waf"; fi
           echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
           echo "Image Tag: $TAG"
 
@@ -182,14 +200,25 @@ jobs:
           echo "Generated Environment Name: ${UNIQUE_ENV_NAME}"
           echo "ENV_NAME=${UNIQUE_ENV_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Debug - WAF Configuration Decision
+        run: |
+          echo "=== DEBUGGING: WAF Configuration Decision ==="
+          echo "WAF_ENABLED value: '${{ env.WAF_ENABLED }}'"
+          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
+            echo "✅ DECISION: WAF ENABLED - Will use main.waf.parameters.json"
+          else
+            echo "❌ DECISION: WAF DISABLED - Will use default main.parameters.json"
+          fi
+          echo "=== END DEBUG SECTION ==="
+
       - name: Configure Parameters Based on WAF Setting
         run: |
           if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
-            echo "Configuring WAF deployment - copying main.waf.parameters.json to main.parameters.json..."
+            echo "🔧 Configuring WAF deployment - copying main.waf.parameters.json to main.parameters.json..."
             cp infra/main.waf.parameters.json infra/main.parameters.json
-            echo "Successfully copied WAF parameters to main parameters file"
+            echo "✅ Successfully copied WAF parameters to main parameters file"
           else
-            echo "Configuring Non-WAF deployment - using default main.parameters.json..."
+            echo "🔧 Configuring Non-WAF deployment - using default main.parameters.json..."
             # Ensure we have the original parameters file if it was overwritten
             if [[ -f infra/main.waf.parameters.json ]] && [[ ! -f infra/main.parameters.json.backup ]]; then
               echo "Backing up original parameters file..."
@@ -223,12 +252,18 @@ jobs:
           azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
           
-          # Set EXP parameters if enabled
+          # Debug and Set EXP parameters if enabled
+          echo "=== DEBUGGING: EXP Configuration ==="
+          echo "EXP value: '${{ env.EXP }}'"
           if [[ "${{ env.EXP }}" == "true" ]]; then
-            echo "Setting EXP parameters..."
+            echo "✅ EXP ENABLED - Setting EXP parameters..."
             azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
             azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
+            echo "✅ EXP parameters configured successfully"
+          else
+            echo "❌ EXP DISABLED - Skipping EXP parameters"
           fi
+          echo "=== END DEBUG SECTION ==="
 
           # Deploy using azd up
           azd up --no-prompt
@@ -325,6 +360,32 @@ jobs:
       AZURE_LOCATION: ${{ needs.deploy.outputs.AZURE_LOCATION }}
       ENV_NAME: ${{ needs.deploy.outputs.ENV_NAME }}
     steps:
+      - name: Debug - Cleanup Job Conditions
+        run: |
+          echo "=== DEBUGGING: Cleanup Job Execution Logic ==="
+          echo "Event type: ${{ github.event_name }}"
+          echo ""
+          echo "Cleanup Input Analysis:"
+          echo "  github.event.inputs.cleanup_resources: '${{ github.event.inputs.cleanup_resources }}'"
+          echo "  Global CLEANUP_RESOURCES env: '${{ env.CLEANUP_RESOURCES }}'"
+          echo ""
+          echo "Job Execution Conditions:"
+          echo "  always(): true (this job will attempt to run)"
+          echo "  needs.deploy.outputs.RESOURCE_GROUP_NAME != '': ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME != '' }}"
+          echo "  Resource group name: '${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}'"
+          echo ""
+          echo "Cleanup Logic Evaluation:"
+          echo "  github.event.inputs.cleanup_resources == true: ${{ github.event.inputs.cleanup_resources == true }}"
+          echo "  github.event.inputs.cleanup_resources == null: ${{ github.event.inputs.cleanup_resources == null }}"
+          echo "  Combined condition result: ${{ github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null }}"
+          echo ""
+          echo "Job Results:"
+          echo "  Deploy job result: ${{ needs.deploy.result }}"
+          echo "  E2E test job result: ${{ needs.e2e-test.result }}"
+          echo ""
+          echo "DECISION: $(if [[ '${{ github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null }}' == 'true' ]]; then echo '✅ CLEANUP WILL PROCEED'; else echo '❌ CLEANUP WILL BE SKIPPED'; fi)"
+          echo "=== END DEBUG SECTION ==="
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
