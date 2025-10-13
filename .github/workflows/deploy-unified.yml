@@ -1,44 +1,26 @@
-name: Deploy-Test-Cleanup (Unified)
+name: Deploy-Test-Cleanup (Parameterized)
 
 on:
   push:
     branches:
       - deploy-azd-waf
-  workflow_run:
-    workflows: ["Build Docker and Optional Push - Client Advisor"]
-    types:
-      - completed
-    branches:
-      - main
-      - hotfix
-      - dev
-      - demo
   workflow_dispatch:
     inputs:
       waf_enabled:
         description: 'Enable WAF (Well-Architected Framework) deployment'
         required: false
-        default: 'false'
-        type: choice
-        options:
-        - 'true'
-        - 'false'
+        default: false
+        type: boolean
       EXP:
-        description: 'Enable EXP features'
+        description: 'Enable EXP'
         required: false
-        default: 'false'
-        type: choice
-        options:
-        - 'true'
-        - 'false'
+        default: false
+        type: boolean
       cleanup_resources:
         description: 'Cleanup deployed resources after testing'
         required: false
-        default: 'true'
-        type: choice
-        options:
-        - 'true'
-        - 'false'
+        default: true
+        type: boolean
   schedule:
     - cron: "0 6,18 * * *" # Runs at 6:00 AM and 6:00 PM GMT
 
@@ -46,9 +28,9 @@ env:
   GPT_MIN_CAPACITY: 150
   TEXT_EMBEDDING_MIN_CAPACITY: 80
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
-  WAF_ENABLED: ${{ github.event.inputs.waf_enabled || 'false' }}
-  EXP: ${{ github.event.inputs.EXP || 'false' }}
-  CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || 'true' }}
+  WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
+  EXP: ${{ github.event.inputs.EXP || false }}
+  CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
 
 jobs:
   deploy:
@@ -59,9 +41,9 @@ jobs:
       ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
     env:
-      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || 'true' }}
-      EXP: ${{ github.event.inputs.EXP || 'false' }}
-      CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || 'true' }}
+      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
+      EXP: ${{ github.event.inputs.EXP || false }}
+      CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
     steps:
       - name: Checkout Code
@@ -335,7 +317,7 @@ jobs:
     secrets: inherit
 
   cleanup-deployment:
-    if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
+    if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null)
     needs: [deploy, e2e-test]
     runs-on: ubuntu-latest
     env:
@@ -385,9 +367,9 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
           # Get deployment configuration for notification
-          WAF_STATUS="${{ github.event.inputs.waf_enabled || 'true' }}"
-          EXP_STATUS="${{ github.event.inputs.EXP || 'false' }}"
-          CLEANUP_STATUS="${{ github.event.inputs.cleanup_resources || 'true' }}"
+          WAF_STATUS="${{ github.event.inputs.waf_enabled || true }}"
+          EXP_STATUS="${{ github.event.inputs.EXP || false }}"
+          CLEANUP_STATUS="${{ github.event.inputs.cleanup_resources || true }}"
 
           # Construct the email body
           EMAIL_BODY=$(cat <<EOF
