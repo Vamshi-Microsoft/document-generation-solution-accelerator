@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       waf_enabled:
-        description: 'Enable WAF (Well-Architected Framework) deployment'
+        description: 'Enable WAF'
         required: false
         default: false
         type: boolean
@@ -17,7 +17,7 @@ on:
         default: false
         type: boolean
       cleanup_resources:
-        description: 'Cleanup deployed resources after testing'
+        description: 'Cleanup deployed resources'
         required: false
         default: true
         type: boolean
