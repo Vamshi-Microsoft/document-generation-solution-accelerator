@@ -12,11 +12,17 @@ on:
         required: false
         default: false
         type: boolean
+      run_e2e_tests:
+        description: 'Run end-to-end tests'
+        required: false
+        default: true
+        type: boolean
       cleanup_resources:
         description: 'Cleanup deployed resources'
         required: false
         default: false
         type: boolean
+      
 
 env:
   GPT_MIN_CAPACITY: 150
@@ -25,6 +31,7 @@ env:
   WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
   EXP: ${{ github.event.inputs.EXP || false }}
   CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
+  RUN_E2E_TESTS: ${{ github.event.inputs.run_e2e_tests || true }}
 
 jobs:
   deploy:
@@ -199,18 +206,6 @@ jobs:
           echo "Generated Environment Name: ${UNIQUE_ENV_NAME}"
           echo "ENV_NAME=${UNIQUE_ENV_NAME}" >> $GITHUB_OUTPUT
 
-      - name: Debug - WAF Configuration Decision
-        run: |
-          echo "=== DEBUGGING: WAF Configuration Decision ==="
-          echo "WAF_ENABLED value: '${{ env.WAF_ENABLED }}'"
-          echo "WAF comparison: [[ '${{ env.WAF_ENABLED }}' == 'true' ]]"
-          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
-            echo "✅ DECISION: WAF ENABLED - Will use main.waf.parameters.json"
-          else
-            echo "❌ DECISION: WAF DISABLED - Will use default main.parameters.json"
-          fi
-          echo "=== END DEBUG SECTION ==="
-
       - name: Configure Parameters Based on WAF Setting
         run: |
           if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
@@ -234,7 +229,7 @@ jobs:
           echo "Full Image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
           echo "================================"
 
-      - name: Deploy using azd up and extract values
+      - name: Deploy using azd up and extract values (${{ env.WAF_ENABLED == 'true' && 'WAF' || 'Non-WAF' }}+${{ env.EXP == 'true' && 'EXP' || 'Non-EXP' }})
         id: get_output
         run: |
           set -e
@@ -261,26 +256,14 @@ jobs:
           azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="${{ env.IMAGE_TAG }}"
-          
-          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
-            echo "✅ WAF ENABLED - Will use main.waf.parameters.json"
-          else
-            echo "❌ WAF DISABLED - Will use default main.parameters.json"
-          fi
 
-          # Debug and Set EXP parameters if enabled
-          echo "=== DEBUGGING: EXP Configuration ==="
-          echo "EXP value: '${{ env.EXP }}'"
-          echo "EXP comparison: [[ '${{ env.EXP }}' == 'true' ]]"
           if [[ "${{ env.EXP }}" == "true" ]]; then
             echo "✅ EXP ENABLED - Setting EXP parameters..."
             azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
             azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
-            echo "✅ EXP parameters configured successfully"
           else
             echo "❌ EXP DISABLED - Skipping EXP parameters"
           fi
-          echo "=== END DEBUG SECTION ==="
 
           # Deploy using azd up
           azd up --no-prompt
@@ -362,6 +345,7 @@ jobs:
           echo "Logged out from Azure."
 
   e2e-test:
+    if: github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null
     needs: deploy
     uses: ./.github/workflows/test-automation.yml
     with:
@@ -370,7 +354,7 @@ jobs:
 
   cleanup-deployment:
     if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null)
-    needs: [deploy, e2e-test]
+    needs: [deploy]
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
