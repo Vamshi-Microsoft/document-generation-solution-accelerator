@@ -1,9 +1,5 @@
 name: Deploy-Test-Cleanup (Parameterized)
-
 on:
-  push:
-    branches:
-      - deploy-azd-waf
   workflow_dispatch:
     inputs:
       waf_enabled:
@@ -21,6 +17,7 @@ on:
         required: false
         default: false
         type: boolean
+
 env:
   GPT_MIN_CAPACITY: 150
   TEXT_EMBEDDING_MIN_CAPACITY: 80
@@ -37,8 +34,9 @@ jobs:
       WEBAPP_URL: ${{ steps.get_output.outputs.WEBAPP_URL }}
       ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
+      IMAGE_TAG: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
     env:
-      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
+      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
       EXP: ${{ github.event.inputs.EXP || false }}
       CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
@@ -46,37 +44,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Debug - WAF/EXP/Cleanup Parameters
-        run: |
-          echo "=== DEBUGGING: WAF/EXP/Cleanup Parameters ==="
-          echo "Event type: ${{ github.event_name }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo ""
-          echo "Raw GitHub Event Inputs:"
-          echo "  github.event.inputs.waf_enabled: '${{ github.event.inputs.waf_enabled }}'"
-          echo "  github.event.inputs.EXP: '${{ github.event.inputs.EXP }}'"
-          echo "  github.event.inputs.cleanup_resources: '${{ github.event.inputs.cleanup_resources }}'"
-          echo ""
-          echo "Global Environment Variables (with defaults):"
-          echo "  WAF_ENABLED (global): '${{ env.WAF_ENABLED }}'"
-          echo "  EXP (global): '${{ env.EXP }}'"
-          echo "  CLEANUP_RESOURCES (global): '${{ env.CLEANUP_RESOURCES }}'"
-          echo ""
-          echo "Job-level Environment Variables (with different defaults):"
-          echo "  WAF_ENABLED (job): '${{ env.WAF_ENABLED }}' (should be true for push events)"
-          echo "  EXP (job): '${{ env.EXP }}' (should be false)"
-          echo "  CLEANUP_RESOURCES (job): '${{ env.CLEANUP_RESOURCES }}' (should be true)"
-          echo ""
-          echo "Logic Evaluation Tests:"
-          echo "  WAF test [[ '${{ env.WAF_ENABLED }}' == 'true' ]]: $(if [[ '${{ env.WAF_ENABLED }}' == 'true' ]]; then echo 'TRUE - WAF WILL BE ENABLED'; else echo 'FALSE - WAF WILL BE DISABLED'; fi)"
-          echo "  EXP test [[ '${{ env.EXP }}' == 'true' ]]: $(if [[ '${{ env.EXP }}' == 'true' ]]; then echo 'TRUE - EXP WILL BE ENABLED'; else echo 'FALSE - EXP WILL BE DISABLED'; fi)"
-          echo "=== END DEBUG SECTION ==="
-
       - name: Setup Azure CLI
         run: |
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
           az --version  # Verify installation
-
+      
       - name: Run Quota Check
         id: quota-check
         run: |
@@ -96,7 +68,7 @@ jobs:
             fi
             exit 1  # Fail the pipeline if any other failure occurs
           fi
-              
+
 
       - name: Send Notification on Quota Failure
         if: env.QUOTA_FAILED == 'true'
@@ -178,16 +150,43 @@ jobs:
           echo "SOLUTION_PREFIX=${UNIQUE_SOLUTION_PREFIX}" >> $GITHUB_ENV
           echo "Generated SOLUTION_PREFIX: ${UNIQUE_SOLUTION_PREFIX}" 
 
-      - name: Determine Tag
-        id: determine_tag
+      - name: Generate Unique Docker Image Tag
+        id: generate_docker_tag
         run: |
-          BRANCH=${{ github.ref_name }}
-          if [[ "$BRANCH" == "main" ]]; then TAG="latest_waf"
-          elif [[ "$BRANCH" == "dev" ]]; then TAG="dev"
-          elif [[ "$BRANCH" == "demo" ]]; then TAG="demo"
-          else TAG="latest_waf"; fi
-          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
-          echo "Image Tag: $TAG"
+          # Generate unique tag for manual deployment runs
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          RUN_ID="${{ github.run_id }}"
+          UNIQUE_TAG="manual-${TIMESTAMP}-${RUN_ID}"
+          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
+          echo "Generated unique Docker tag: $UNIQUE_TAG"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_DEV_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_DEV_USERNAME }}
+          password: ${{ secrets.ACR_DEV_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        id: build_push_image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          file: ./src/WebApp.Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
+            ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
+
+      - name: Verify Docker Image Build
+        run: |
+          echo "✅ Docker image successfully built and pushed"
+          echo "Image tag: ${{ env.IMAGE_TAG }}"
+          echo "Run number: ${{ github.run_number }}"
 
       - name: Generate Unique Environment Name
         id: generate_env_name
@@ -204,6 +203,7 @@ jobs:
         run: |
           echo "=== DEBUGGING: WAF Configuration Decision ==="
           echo "WAF_ENABLED value: '${{ env.WAF_ENABLED }}'"
+          echo "WAF comparison: [[ '${{ env.WAF_ENABLED }}' == 'true' ]]"
           if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
             echo "✅ DECISION: WAF ENABLED - Will use main.waf.parameters.json"
           else
@@ -226,6 +226,14 @@ jobs:
             fi
           fi
 
+      - name: Display Docker Image Tag
+        run: |
+          echo "=== Docker Image Information ==="
+          echo "Docker Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "Registry: ${{ secrets.ACR_DEV_LOGIN_SERVER }}"
+          echo "Full Image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+          echo "================================"
+
       - name: Deploy using azd up and extract values
         id: get_output
         run: |
@@ -233,6 +241,7 @@ jobs:
           echo "Starting azd deployment..."
           echo "WAF Enabled: ${{ env.WAF_ENABLED }}"
           echo "EXP: ${{ env.EXP }}"
+          echo "Using Docker Image Tag: ${{ env.IMAGE_TAG }}"
           
           # Install azd (Azure Developer CLI)
           curl -fsSL https://aka.ms/install-azd.sh | bash
@@ -251,10 +260,18 @@ jobs:
           azd env set AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
+          azd env set AZURE_ENV_IMAGETAG="${{ env.IMAGE_TAG }}"
           
+          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
+            echo "✅ WAF ENABLED - Will use main.waf.parameters.json"
+          else
+            echo "❌ WAF DISABLED - Will use default main.parameters.json"
+          fi
+
           # Debug and Set EXP parameters if enabled
           echo "=== DEBUGGING: EXP Configuration ==="
           echo "EXP value: '${{ env.EXP }}'"
+          echo "EXP comparison: [[ '${{ env.EXP }}' == 'true' ]]"
           if [[ "${{ env.EXP }}" == "true" ]]; then
             echo "✅ EXP ENABLED - Setting EXP parameters..."
             azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
@@ -359,33 +376,8 @@ jobs:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
       AZURE_LOCATION: ${{ needs.deploy.outputs.AZURE_LOCATION }}
       ENV_NAME: ${{ needs.deploy.outputs.ENV_NAME }}
+      IMAGE_TAG: ${{ needs.deploy.outputs.IMAGE_TAG }}
     steps:
-      - name: Debug - Cleanup Job Conditions
-        run: |
-          echo "=== DEBUGGING: Cleanup Job Execution Logic ==="
-          echo "Event type: ${{ github.event_name }}"
-          echo ""
-          echo "Cleanup Input Analysis:"
-          echo "  github.event.inputs.cleanup_resources: '${{ github.event.inputs.cleanup_resources }}'"
-          echo "  Global CLEANUP_RESOURCES env: '${{ env.CLEANUP_RESOURCES }}'"
-          echo ""
-          echo "Job Execution Conditions:"
-          echo "  always(): true (this job will attempt to run)"
-          echo "  needs.deploy.outputs.RESOURCE_GROUP_NAME != '': ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME != '' }}"
-          echo "  Resource group name: '${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}'"
-          echo ""
-          echo "Cleanup Logic Evaluation:"
-          echo "  github.event.inputs.cleanup_resources == true: ${{ github.event.inputs.cleanup_resources == true }}"
-          echo "  github.event.inputs.cleanup_resources == null: ${{ github.event.inputs.cleanup_resources == null }}"
-          echo "  Combined condition result: ${{ github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null }}"
-          echo ""
-          echo "Job Results:"
-          echo "  Deploy job result: ${{ needs.deploy.result }}"
-          echo "  E2E test job result: ${{ needs.e2e-test.result }}"
-          echo ""
-          echo "DECISION: $(if [[ '${{ github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null }}' == 'true' ]]; then echo '✅ CLEANUP WILL PROCEED'; else echo '❌ CLEANUP WILL BE SKIPPED'; fi)"
-          echo "=== END DEBUG SECTION ==="
-
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -398,6 +390,38 @@ jobs:
         run: |
           azd auth login --client-id ${{ secrets.AZURE_CLIENT_ID }} --client-secret ${{ secrets.AZURE_CLIENT_SECRET }} --tenant-id ${{ secrets.AZURE_TENANT_ID }}
           azd config set defaults.subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Azure CLI for Docker cleanup
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      - name: Login to Azure CLI for Docker cleanup
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Delete Docker Images from ACR
+        run: |
+          set -e
+          echo "🗑️ Cleaning up Docker images from Azure Container Registry..."
+          
+          if [[ -n "${{ env.IMAGE_TAG }}" ]]; then
+            echo "Deleting Docker images with tag: ${{ env.IMAGE_TAG }}"
+            
+            # Delete the main image
+            echo "Deleting image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+            az acr repository delete --name $(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1) \
+              --image webapp:${{ env.IMAGE_TAG }} --yes || echo "Warning: Failed to delete main image or image not found"
+            
+            # Delete the image with run number suffix
+            echo "Deleting image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }}"
+            az acr repository delete --name $(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1) \
+              --image webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
+            
+            echo "✅ Docker images cleanup completed"
+          else
+            echo "⚠️ No IMAGE_TAG found, skipping Docker image cleanup"
+          fi
 
       - name: Select Environment
         run: |
@@ -449,4 +473,5 @@ jobs:
         if: always()
         run: |
           azd auth logout
+          az logout || echo "Warning: Failed to logout from Azure CLI"
           echo "Logged out from Azure."
