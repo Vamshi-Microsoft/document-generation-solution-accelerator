@@ -163,10 +163,7 @@ jobs:
           # Generate unique tag for manual deployment runs
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           RUN_ID="${{ github.run_id }}"
-          BRANCH_NAME="${{ env.BRANCH_NAME }}"
-          # Sanitize branch name for Docker tag (replace invalid characters with hyphens)
-          CLEAN_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-          UNIQUE_TAG="${CLEAN_BRANCH_NAME}-${TIMESTAMP}-${RUN_ID}"
+          UNIQUE_TAG="manual-${TIMESTAMP}-${RUN_ID}"
           echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
           echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
           echo "Generated unique Docker tag: $UNIQUE_TAG"
