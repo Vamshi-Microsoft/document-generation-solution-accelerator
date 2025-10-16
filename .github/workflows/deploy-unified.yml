@@ -41,8 +41,6 @@ env:
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
   EXP: ${{ github.event.inputs.EXP || false }}
-  AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' && github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID || secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}
-  AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '' && github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID || secrets.EXP_AI_PROJECT_RESOURCE_ID }}
   CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
   RUN_E2E_TESTS: ${{ github.event.inputs.run_e2e_tests || true }}
 
@@ -58,8 +56,6 @@ jobs:
     env:
       WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
       EXP: ${{ github.event.inputs.EXP || false }}
-      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' && github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID || secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}
-      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '' && github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID || secrets.EXP_AI_PROJECT_RESOURCE_ID }}
       CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
     steps:
@@ -305,10 +301,24 @@ jobs:
 
           if [[ "${{ env.EXP }}" == "true" ]]; then
             echo "✅ EXP ENABLED - Setting EXP parameters..."
-            echo "AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ env.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
-            echo "AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ env.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
-            azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ env.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
-            azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ env.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
+            
+            # Set EXP variables dynamically
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]]; then
+              EXP_LOG_ANALYTICS_ID="${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
+            else
+              EXP_LOG_ANALYTICS_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
+            fi
+            
+            if [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              EXP_AI_PROJECT_ID="${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
+            else
+              EXP_AI_PROJECT_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
+            fi
+            
+            echo "AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: $EXP_LOG_ANALYTICS_ID"
+            echo "AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: $EXP_AI_PROJECT_ID"
+            azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="$EXP_LOG_ANALYTICS_ID"
+            azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="$EXP_AI_PROJECT_ID"
           else
             echo "❌ EXP DISABLED - Skipping EXP parameters"
             if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
