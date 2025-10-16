@@ -12,6 +12,16 @@ on:
         required: false
         default: false
         type: boolean
+      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
+        description: '[EXP Only] Azure Log Analytics Workspace ID (leave empty for default from secrets)'
+        required: false
+        default: ''
+        type: string
+      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
+        description: '[EXP Only] Azure AI Project Resource ID (leave empty for default from secrets)'
+        required: false
+        default: ''
+        type: string
       run_e2e_tests:
         description: 'Run end-to-end tests'
         required: false
@@ -30,6 +40,8 @@ env:
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
   EXP: ${{ github.event.inputs.EXP || false }}
+  AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' && github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID || secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}
+  AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '' && github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID || secrets.EXP_AI_PROJECT_RESOURCE_ID }}
   CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
   RUN_E2E_TESTS: ${{ github.event.inputs.run_e2e_tests || true }}
 
@@ -45,6 +57,8 @@ jobs:
     env:
       WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
       EXP: ${{ github.event.inputs.EXP || false }}
+      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' && github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID || secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}
+      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '' && github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID || secrets.EXP_AI_PROJECT_RESOURCE_ID }}
       CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
     steps:
@@ -267,10 +281,15 @@ jobs:
 
           if [[ "${{ env.EXP }}" == "true" ]]; then
             echo "✅ EXP ENABLED - Setting EXP parameters..."
-            azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
-            azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
+            echo "AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ env.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
+            echo "AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ env.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
+            azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="${{ env.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
+            azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="${{ env.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
           else
             echo "❌ EXP DISABLED - Skipping EXP parameters"
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              echo "⚠️  Warning: EXP parameter values provided but EXP is disabled. These values will be ignored."
+            fi
           fi
 
           # Deploy using azd up
