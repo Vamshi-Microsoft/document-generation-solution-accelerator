@@ -2,26 +2,6 @@ name: Deploy-Test-Cleanup (Parameterized)
 on:
   workflow_dispatch:
     inputs:
-      waf_enabled:
-        description: 'Enable WAF'
-        required: false
-        default: false
-        type: boolean
-      EXP:
-        description: 'Enable EXP'
-        required: false
-        default: false
-        type: boolean
-      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
-        description: '[EXP Only] Azure Log Analytics Workspace ID (leave empty for default from secrets)'
-        required: false
-        default: ''
-        type: string
-      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
-        description: '[EXP Only] Azure AI Project Resource ID (leave empty for default from secrets)'
-        required: false
-        default: ''
-        type: string
       run_e2e_tests:
         description: 'Run end-to-end tests'
         required: false
@@ -32,6 +12,27 @@ on:
         required: false
         default: false
         type: boolean
+      waf_enabled:
+        description: 'Enable WAF'
+        required: false
+        default: false
+        type: boolean
+      EXP:
+        description: 'Enable EXP (Required for below fields)'
+        required: false
+        default: false
+        type: boolean
+      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
+        description: '⚠️ ONLY if EXP enabled - Enter Azure Log Analytics Workspace ID (leave empty for default value)'
+        required: false
+        default: ''
+        type: string
+      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
+        description: '⚠️ ONLY if EXP enabled - Enter Azure AI Project Resource ID (leave empty for default value)'
+        required: false
+        default: ''
+        type: string
+      
       
 
 env:
@@ -62,6 +63,29 @@ jobs:
       CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
       
     steps:
+      - name: Validate EXP Configuration
+        run: |
+          echo "🔍 Validating EXP configuration..."
+          
+          # Check if EXP values were provided but EXP is disabled
+          if [[ "${{ github.event.inputs.EXP }}" != "true" ]]; then
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              echo "❌ ERROR: EXP parameter values were provided but EXP is not enabled!"
+              echo ""
+              echo "You provided values for:"
+              [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] && echo "  - Azure Log Analytics Workspace ID: '${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}'"
+              [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]] && echo "  - Azure AI Project Resource ID: '${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}'"
+              echo ""
+              echo "✅ To fix this:"
+              echo "  1. Go back and check the 'Enable EXP' checkbox, OR"
+              echo "  2. Clear the EXP-related fields if you don't want to use EXP"
+              echo ""
+              exit 1
+            fi
+          fi
+          
+          echo "✅ EXP configuration is valid"
+          
       - name: Checkout Code
         uses: actions/checkout@v4
 
