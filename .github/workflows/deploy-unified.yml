@@ -32,6 +32,11 @@ on:
         required: false
         default: ''
         type: string
+      build_docker_image:
+        description: 'Build and push new Docker image'
+        required: false
+        default: true
+        type: boolean
       
       
 
@@ -43,6 +48,7 @@ env:
   EXP: ${{ github.event.inputs.EXP || false }}
   CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
   RUN_E2E_TESTS: ${{ github.event.inputs.run_e2e_tests || true }}
+  BUILD_DOCKER_IMAGE: ${{ github.event.inputs.build_docker_image || false }}
 
 jobs:
   deploy:
@@ -194,21 +200,31 @@ jobs:
       - name: Generate Unique Docker Image Tag
         id: generate_docker_tag
         run: |
-          # Generate unique tag for manual deployment runs
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          RUN_ID="${{ github.run_id }}"
-          BRANCH_NAME="${{ env.BRANCH_NAME }}"
-          # Sanitize branch name for Docker tag (replace invalid characters with hyphens)
-          CLEAN_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-          UNIQUE_TAG="${CLEAN_BRANCH_NAME}-${TIMESTAMP}-${RUN_ID}"
-          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
-          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
-          echo "Generated unique Docker tag: $UNIQUE_TAG"
+          if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
+            echo "🔨 Building new Docker image - generating unique tag..."
+            # Generate unique tag for manual deployment runs
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            RUN_ID="${{ github.run_id }}"
+            BRANCH_NAME="${{ env.BRANCH_NAME }}"
+            # Sanitize branch name for Docker tag (replace invalid characters with hyphens)
+            CLEAN_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+            UNIQUE_TAG="${CLEAN_BRANCH_NAME}-${TIMESTAMP}-${RUN_ID}"
+            echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
+            echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
+            echo "Generated unique Docker tag: $UNIQUE_TAG"
+          else
+            echo "🏷️ Using existing Docker image with tag: latest_waf"
+            echo "IMAGE_TAG=latest_waf" >> $GITHUB_ENV
+            echo "IMAGE_TAG=latest_waf" >> $GITHUB_OUTPUT
+            echo "Using existing Docker image tag: latest_waf"
+          fi
 
       - name: Set up Docker Buildx
+        if: env.BUILD_DOCKER_IMAGE == true
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Azure Container Registry
+        if: env.BUILD_DOCKER_IMAGE == true
         uses: azure/docker-login@v2
         with:
           login-server: ${{ secrets.ACR_DEV_LOGIN_SERVER }}
@@ -216,6 +232,7 @@ jobs:
           password: ${{ secrets.ACR_DEV_PASSWORD }}
 
       - name: Build and Push Docker Image
+        if: env.BUILD_DOCKER_IMAGE == true
         id: build_push_image
         uses: docker/build-push-action@v6
         with:
@@ -227,10 +244,17 @@ jobs:
             ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
 
       - name: Verify Docker Image Build
+        if: env.BUILD_DOCKER_IMAGE == true
         run: |
           echo "✅ Docker image successfully built and pushed"
           echo "Image tag: ${{ env.IMAGE_TAG }}"
           echo "Run number: ${{ github.run_number }}"
+
+      - name: Verify Docker Image Selection
+        if: env.BUILD_DOCKER_IMAGE == false
+        run: |
+          echo "✅ Using existing Docker image: latest_waf"
+          echo "Image tag: ${{ env.IMAGE_TAG }}"
 
       - name: Generate Unique Environment Name
         id: generate_env_name
@@ -294,10 +318,15 @@ jobs:
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="${{ env.IMAGE_TAG }}"
           
-          # Extract ACR name from login server and set as environment variable
-          ACR_NAME=$(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1)
-          azd env set AZURE_ENV_ACR_NAME="$ACR_NAME"
-          echo "Set ACR name to: $ACR_NAME"
+          # Set ACR name only when building Docker image
+          if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
+            # Extract ACR name from login server and set as environment variable
+            ACR_NAME=$(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1)
+            azd env set AZURE_ENV_ACR_NAME="$ACR_NAME"
+            echo "Set ACR name to: $ACR_NAME"
+          else
+            echo "Skipping ACR name configuration (using existing image)"
+          fi
 
           if [[ "${{ env.EXP }}" == "true" ]]; then
             echo "✅ EXP ENABLED - Setting EXP parameters..."
@@ -450,7 +479,7 @@ jobs:
           set -e
           echo "🗑️ Cleaning up Docker images from Azure Container Registry..."
           
-          if [[ -n "${{ env.IMAGE_TAG }}" ]]; then
+          if [[ -n "${{ env.IMAGE_TAG }}" && "${{ env.IMAGE_TAG }}" != "latest_waf" ]]; then
             echo "Deleting Docker images with tag: ${{ env.IMAGE_TAG }}"
             
             # Delete the main image
@@ -465,7 +494,7 @@ jobs:
             
             echo "✅ Docker images cleanup completed"
           else
-            echo "⚠️ No IMAGE_TAG found, skipping Docker image cleanup"
+            echo "⚠️ Skipping Docker image cleanup (using latest_waf or no custom image tag)"
           fi
 
       - name: Select Environment
