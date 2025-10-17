@@ -34,12 +34,12 @@ on:
         default: false
         type: boolean
       AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
-        description: 'Use Only if EXP is Enabled - Enter Azure Log Analytics Workspace ID (leave empty for default value)'
+        description: 'Enter Azure Log Analytics Workspace ID (leave empty for default value)'
         required: false
         default: ''
         type: string
       AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
-        description: 'Use Only if EXP is Enabled - Enter Azure AI Project Resource ID (leave empty for default value)'
+        description: 'Enter Azure AI Project Resource ID (leave empty for default value)'
         required: false
         default: ''
         type: string
@@ -100,27 +100,29 @@ jobs:
             echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
           else
             echo "ℹ️  Manual Trigger: Using user-specified configuration"
+            # Check if EXP was auto-enabled after user input validation
+            if [[ "${{ env.EXP }}" == "true" && "${{ github.event.inputs.EXP }}" != "true" ]]; then
+              echo "🔧 Note: EXP was automatically enabled due to provided parameter values"
+            fi
           fi
           echo "🚀 ==================================="
 
-      - name: Validate EXP Configuration
+      - name: Validate and Auto-Configure EXP
         run: |
           echo "🔍 Validating EXP configuration..."
           
           # Check if EXP values were provided but EXP is disabled
           if [[ "${{ github.event.inputs.EXP }}" != "true" ]]; then
             if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
-              echo "❌ ERROR: EXP parameter values were provided but EXP is not enabled!"
+              echo "🔧 AUTO-ENABLING EXP: EXP parameter values were provided but EXP was not explicitly enabled."
               echo ""
               echo "You provided values for:"
               [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] && echo "  - Azure Log Analytics Workspace ID: '${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}'"
               [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]] && echo "  - Azure AI Project Resource ID: '${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}'"
               echo ""
-              echo "✅ To fix this:"
-              echo "  1. Go back and check the 'Enable EXP' checkbox, OR"
-              echo "  2. Clear the EXP-related fields if you don't want to use EXP"
-              echo ""
-              exit 1
+              echo "✅ Automatically enabling EXP to use these values."
+              echo "EXP=true" >> $GITHUB_ENV
+              echo "📌 EXP has been automatically enabled for this deployment."
             fi
           fi
           
@@ -585,7 +587,7 @@ jobs:
           
           # Get deployment configuration for notification
           WAF_STATUS="${{ github.event.inputs.waf_enabled || true }}"
-          EXP_STATUS="${{ github.event.inputs.EXP || false }}"
+          EXP_STATUS="${{ env.EXP || false }}"
           CLEANUP_STATUS="${{ github.event.inputs.cleanup_resources || true }}"
 
           # Construct the email body
