@@ -623,7 +623,7 @@ module aiSearch 'br/public:avm/res/search/search-service:0.11.1' = {
     diagnosticSettings: enableMonitoring ? [{ workspaceResourceId: logAnalyticsWorkspaceResourceId }] : null
     disableLocalAuth: false
     hostingMode: 'default'
-    sku: enableScalability ? 'standard' : 'basic'
+    sku: enableScalability ? 'standard' : 'standard'
     managedIdentities: { systemAssigned: true }
     networkRuleSet: {
       bypass: 'AzureServices'

@@ -1,5 +1,16 @@
 name: Deploy-Test-Cleanup (Parameterized)
 on:
+  pull_request:
+    branches:
+      - main
+  workflow_run:
+    workflows: ["Build Docker and Optional Push"]
+    types:
+      - completed
+    branches:
+      - main
+      - dev
+      - demo
   workflow_dispatch:
     inputs:
       run_e2e_tests:
@@ -37,6 +48,8 @@ on:
         required: false
         default: false
         type: boolean
+  schedule:
+    - cron: "0 6,18 * * *" # Runs at 6:00 AM and 6:00 PM GMT
       
       
 
@@ -44,11 +57,13 @@ env:
   GPT_MIN_CAPACITY: 150
   TEXT_EMBEDDING_MIN_CAPACITY: 80
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
-  WAF_ENABLED: ${{ github.event.inputs.waf_enabled || false }}
-  EXP: ${{ github.event.inputs.EXP || false }}
-  CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
-  RUN_E2E_TESTS: ${{ github.event.inputs.run_e2e_tests || true }}
-  BUILD_DOCKER_IMAGE: ${{ github.event.inputs.build_docker_image || false }}
+  # For automatic triggers (pull_request, workflow_run, schedule): force Non-WAF + Non-EXP
+  # For manual dispatch: use input values or defaults
+  WAF_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.waf_enabled || false) || false }}
+  EXP: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.EXP || false) || false }}
+  CLEANUP_RESOURCES: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.cleanup_resources || true) || true }}
+  RUN_E2E_TESTS: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.run_e2e_tests || true) || true }}
+  BUILD_DOCKER_IMAGE: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build_docker_image || false) || false }}
 
 jobs:
   deploy:
@@ -60,11 +75,34 @@ jobs:
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
       IMAGE_TAG: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
     env:
-      WAF_ENABLED: ${{ github.event.inputs.waf_enabled || true }}
-      EXP: ${{ github.event.inputs.EXP || false }}
-      CLEANUP_RESOURCES: ${{ github.event.inputs.cleanup_resources || true }}
+      # For automatic triggers: force Non-WAF + Non-EXP, for manual dispatch: use inputs
+      WAF_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.waf_enabled || false) || false }}
+      EXP: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.EXP || false) || false }}
+      CLEANUP_RESOURCES: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.cleanup_resources || true) || true }}
       
     steps:
+      - name: Display Workflow Configuration
+        run: |
+          echo "🚀 ==================================="
+          echo "📋 WORKFLOW CONFIGURATION SUMMARY"
+          echo "🚀 ==================================="
+          echo "Trigger Type: ${{ github.event_name }}"
+          echo "Branch: ${{ env.BRANCH_NAME }}"
+          echo ""
+          echo "Configuration Settings:"
+          echo "  • WAF Enabled: ${{ env.WAF_ENABLED }}"
+          echo "  • EXP Enabled: ${{ env.EXP }}"
+          echo "  • Run E2E Tests: ${{ env.RUN_E2E_TESTS }}"
+          echo "  • Cleanup Resources: ${{ env.CLEANUP_RESOURCES }}"
+          echo "  • Build Docker Image: ${{ env.BUILD_DOCKER_IMAGE }}"
+          echo ""
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
+          else
+            echo "ℹ️  Manual Trigger: Using user-specified configuration"
+          fi
+          echo "🚀 ==================================="
+
       - name: Validate EXP Configuration
         run: |
           echo "🔍 Validating EXP configuration..."
@@ -453,7 +491,8 @@ jobs:
           echo "Logged out from Azure."
 
   e2e-test:
-    if: github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null
+    # Run e2e tests for automatic triggers or when manually enabled
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null
     needs: deploy
     uses: ./.github/workflows/test-automation.yml
     with:
@@ -461,7 +500,8 @@ jobs:
     secrets: inherit
 
   cleanup-deployment:
-    if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null)
+    # Cleanup for automatic triggers or when manually enabled
+    if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null)
     needs: [deploy]
     runs-on: ubuntu-latest
     env:
