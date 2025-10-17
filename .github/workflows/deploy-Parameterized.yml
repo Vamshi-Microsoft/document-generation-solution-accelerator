@@ -29,17 +29,17 @@ on:
         default: false
         type: boolean
       EXP:
-        description: 'Enable EXP (Required for below fields)'
+        description: 'Enable EXP'
         required: false
         default: false
         type: boolean
       AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
-        description: '⚠️ ONLY if EXP enabled - Enter Azure Log Analytics Workspace ID (leave empty for default value)'
+        description: 'Use Only if EXP is Enabled - Enter Azure Log Analytics Workspace ID (leave empty for default value)'
         required: false
         default: ''
         type: string
       AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
-        description: '⚠️ ONLY if EXP enabled - Enter Azure AI Project Resource ID (leave empty for default value)'
+        description: 'Use Only if EXP is Enabled - Enter Azure AI Project Resource ID (leave empty for default value)'
         required: false
         default: ''
         type: string
