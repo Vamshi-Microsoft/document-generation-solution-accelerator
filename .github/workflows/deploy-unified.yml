@@ -35,7 +35,7 @@ on:
       build_docker_image:
         description: 'Build and push new Docker image'
         required: false
-        default: true
+        default: false
         type: boolean
       
       
@@ -213,10 +213,28 @@ jobs:
             echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
             echo "Generated unique Docker tag: $UNIQUE_TAG"
           else
-            echo "🏷️ Using existing Docker image with tag: latest_waf"
-            echo "IMAGE_TAG=latest_waf" >> $GITHUB_ENV
-            echo "IMAGE_TAG=latest_waf" >> $GITHUB_OUTPUT
-            echo "Using existing Docker image tag: latest_waf"
+            echo "🏷️ Using existing Docker image based on branch..."
+            BRANCH_NAME="${{ env.BRANCH_NAME }}"
+            echo "Current branch: $BRANCH_NAME"
+            
+            # Determine image tag based on branch
+            if [[ "$BRANCH_NAME" == "main" ]]; then
+              IMAGE_TAG="latest_waf"
+              echo "Using main branch - image tag: latest_waf"
+            elif [[ "$BRANCH_NAME" == "dev" ]]; then
+              IMAGE_TAG="dev"
+              echo "Using dev branch - image tag: dev"
+            elif [[ "$BRANCH_NAME" == "demo" ]]; then
+              IMAGE_TAG="demo"
+              echo "Using demo branch - image tag: demo"
+            else
+              IMAGE_TAG="latest_waf"
+              echo "Using default for branch '$BRANCH_NAME' - image tag: latest_waf"
+            fi
+            
+            echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+            echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+            echo "Using existing Docker image tag: $IMAGE_TAG"
           fi
 
       - name: Set up Docker Buildx
