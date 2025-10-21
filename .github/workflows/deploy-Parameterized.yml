@@ -43,6 +43,11 @@ on:
         required: false
         default: ''
         type: string
+      existing_webapp_url:
+        description: 'Enter existing WebApp URL (skips deployment if provided)'
+        required: false
+        default: ''
+        type: string
       build_docker_image:
         description: 'Build and push new Docker image'
         required: false
@@ -67,6 +72,8 @@ env:
 
 jobs:
   deploy:
+    # Skip deployment if an existing webapp URL is provided
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null
     runs-on: ubuntu-latest
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
@@ -95,6 +102,12 @@ jobs:
           echo "  • Run E2E Tests: ${{ env.RUN_E2E_TESTS }}"
           echo "  • Cleanup Resources: ${{ env.CLEANUP_RESOURCES }}"
           echo "  • Build Docker Image: ${{ env.BUILD_DOCKER_IMAGE }}"
+          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
+            echo "  • Using Existing Webapp URL: ${{ github.event.inputs.existing_webapp_url }}"
+            echo "  • Skip Deployment: Yes"
+          else
+            echo "  • Skip Deployment: No"
+          fi
           echo ""
           if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
             echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
@@ -495,15 +508,15 @@ jobs:
   e2e-test:
     # Run e2e tests for automatic triggers or when manually enabled
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null
-    needs: deploy
+    needs: [deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
-      DOCGEN_URL: ${{ needs.deploy.outputs.WEBAPP_URL }}
+      DOCGEN_URL: ${{ github.event.inputs.existing_webapp_url || needs.deploy.outputs.WEBAPP_URL }}
     secrets: inherit
 
   cleanup-deployment:
-    # Cleanup for automatic triggers or when manually enabled
-    if: always() && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == true || github.event.inputs.cleanup_resources == null)
+    # Cleanup for automatic triggers or when manually enabled (skip cleanup when using existing webapp URL)
+    if: always() && needs.deploy.result != 'skipped' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.cleanup_resources == true && github.event.inputs.existing_webapp_url == ''))
     needs: [deploy]
     runs-on: ubuntu-latest
     env:
