@@ -34,22 +34,22 @@ on:
         default: false
         type: boolean
       AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
-        description: 'Enter Azure Log Analytics Workspace ID (leave empty for default value)'
+        description: 'Log Analytics Workspace ID (optional)'
         required: false
         default: ''
         type: string
       AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
-        description: 'Enter Azure AI Project Resource ID (leave empty for default value)'
+        description: 'AI Project Resource ID (optional)'
         required: false
         default: ''
         type: string
       existing_webapp_url:
-        description: 'Enter existing WebApp URL (skips deployment if provided)'
+        description: 'Existing WebApp URL'
         required: false
         default: ''
         type: string
       build_docker_image:
-        description: 'Build and push new Docker image'
+        description: 'Build and push Docker image'
         required: false
         default: false
         type: boolean
