@@ -388,6 +388,7 @@ jobs:
           azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
           azd env set AZURE_ENV_IMAGETAG="${{ env.IMAGE_TAG }}"
+          azd env set AZURE_DEV_COLLECT_TELEMETRY="no"
           
           # Set ACR name only when building Docker image
           if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
@@ -470,12 +471,12 @@ jobs:
           WEB_APP_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.WEB_APP_NAME // .SERVICE_BACKEND_NAME // empty')
           echo "WEB_APP_NAME=$WEB_APP_NAME" >> $GITHUB_ENV
           
-          echo "🔧 Disabling AUTH_ENABLED for the web app..."
-          if [[ -n "$WEB_APP_NAME" && -n "$RESOURCE_GROUP_NAME" ]]; then
-            az webapp config appsettings set -g "$RESOURCE_GROUP_NAME" -n "$WEB_APP_NAME" --settings AUTH_ENABLED=false
-          else
-            echo "Warning: Could not disable AUTH_ENABLED - WEB_APP_NAME or RESOURCE_GROUP_NAME not found"
-          fi
+          # echo "🔧 Disabling AUTH_ENABLED for the web app..."
+          # if [[ -n "$WEB_APP_NAME" && -n "$RESOURCE_GROUP_NAME" ]]; then
+          #   az webapp config appsettings set -g "$RESOURCE_GROUP_NAME" -n "$WEB_APP_NAME" --settings AUTH_ENABLED=false
+          # else
+          #   echo "Warning: Could not disable AUTH_ENABLED - WEB_APP_NAME or RESOURCE_GROUP_NAME not found"
+          # fi
 
           sleep 30
       
@@ -507,7 +508,7 @@ jobs:
 
   e2e-test:
     # Run e2e tests for automatic triggers or when manually enabled
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null
+    if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null)
     needs: [deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
