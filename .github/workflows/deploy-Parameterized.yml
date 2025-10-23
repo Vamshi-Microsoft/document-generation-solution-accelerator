@@ -298,9 +298,9 @@ jobs:
         if: env.BUILD_DOCKER_IMAGE == 'true'
         uses: azure/docker-login@v2
         with:
-          login-server: ${{ secrets.ACR_DEV_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_DEV_USERNAME }}
-          password: ${{ secrets.ACR_DEV_PASSWORD }}
+          login-server: ${{ secrets.ACR_TEST_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_TEST_USERNAME }}
+          password: ${{ secrets.ACR_TEST_PASSWORD }}
 
       - name: Build and Push Docker Image
         if: env.BUILD_DOCKER_IMAGE == 'true'
@@ -311,8 +311,8 @@ jobs:
           file: ./src/WebApp.Dockerfile
           push: true
           tags: |
-            ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
-            ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
+            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
+            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
 
       - name: Verify Docker Image Build
         if: env.BUILD_DOCKER_IMAGE == 'true'
@@ -357,8 +357,8 @@ jobs:
         run: |
           echo "=== Docker Image Information ==="
           echo "Docker Image Tag: ${{ env.IMAGE_TAG }}"
-          echo "Registry: ${{ secrets.ACR_DEV_LOGIN_SERVER }}"
-          echo "Full Image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+          echo "Registry: ${{ secrets.ACR_TEST_LOGIN_SERVER }}"
+          echo "Full Image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
           echo "================================"
 
       - name: Deploy using azd up and extract values (${{ env.WAF_ENABLED == 'true' && 'WAF' || 'Non-WAF' }}+${{ env.EXP == 'true' && 'EXP' || 'Non-EXP' }})
@@ -393,7 +393,7 @@ jobs:
           # Set ACR name only when building Docker image
           if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
             # Extract ACR name from login server and set as environment variable
-            ACR_NAME=$(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1)
+            ACR_NAME=$(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1)
             azd env set AZURE_ENV_ACR_NAME="$ACR_NAME"
             echo "Set ACR name to: $ACR_NAME"
           else
@@ -557,13 +557,13 @@ jobs:
             echo "Deleting Docker images with tag: ${{ env.IMAGE_TAG }}"
             
             # Delete the main image
-            echo "Deleting image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
-            az acr repository delete --name $(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1) \
+            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+            az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
               --image webapp:${{ env.IMAGE_TAG }} --yes || echo "Warning: Failed to delete main image or image not found"
             
             # Delete the image with run number suffix
-            echo "Deleting image: ${{ secrets.ACR_DEV_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }}"
-            az acr repository delete --name $(echo "${{ secrets.ACR_DEV_LOGIN_SERVER }}" | cut -d'.' -f1) \
+            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }}"
+            az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
               --image webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
             
             echo "✅ Docker images cleanup completed"
