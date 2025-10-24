@@ -517,7 +517,7 @@ jobs:
 
   cleanup-deployment:
     # Cleanup for automatic triggers or when manually enabled (skip cleanup when using existing webapp URL)
-    if: always() && needs.deploy.result != 'skipped' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.cleanup_resources == true && github.event.inputs.existing_webapp_url == ''))
+    if: always() && needs.deploy.result != 'skipped' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.cleanup_resources == 'true' && github.event.inputs.existing_webapp_url == ''))
     needs: [deploy]
     runs-on: ubuntu-latest
     env:
