@@ -54,10 +54,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: "0 6,18 * * *" # Runs at 6:00 AM and 6:00 PM GMT
-      
-      
-
+    - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
 env:
   GPT_MIN_CAPACITY: 150
   TEXT_EMBEDDING_MIN_CAPACITY: 80
@@ -138,8 +135,6 @@ jobs:
               echo "📌 EXP has been automatically enabled for this deployment."
             fi
           fi
-          
-          echo "✅ EXP configuration is valid"
           
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -321,12 +316,6 @@ jobs:
           echo "Image tag: ${{ env.IMAGE_TAG }}"
           echo "Run number: ${{ github.run_number }}"
 
-      - name: Verify Docker Image Selection
-        if: env.BUILD_DOCKER_IMAGE == 'false'
-        run: |
-          echo "✅ Using existing Docker image: latest_waf"
-          echo "Image tag: ${{ env.IMAGE_TAG }}"
-
       - name: Generate Unique Environment Name
         id: generate_env_name
         run: |
@@ -361,7 +350,7 @@ jobs:
           echo "Full Image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
           echo "================================"
 
-      - name: Deploy using azd up and extract values (${{ env.WAF_ENABLED == 'true' && 'WAF' || 'Non-WAF' }}+${{ env.EXP == 'true' && 'EXP' || 'Non-EXP' }})
+      - name: Deploy using azd up and extract values (${{ github.event.inputs.waf_enabled == 'true' && 'WAF' || 'Non-WAF' }}+${{ (github.event.inputs.EXP == 'true' || github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' || github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '') && 'EXP' || 'Non-EXP' }})
         id: get_output
         run: |
           set -e
@@ -507,8 +496,10 @@ jobs:
           echo "Logged out from Azure."
 
   e2e-test:
-    # Run e2e tests for automatic triggers, when manually enabled, or when existing webapp URL is provided
-    if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null || github.event.inputs.existing_webapp_url != '')
+    # Run e2e tests only when deploy succeeds or when using existing webapp URL
+    # Skip if deploy job failed (for both automatic and manual triggers)
+    # Respect the run_e2e_tests checkbox - skip if explicitly unchecked
+    if: (needs.deploy.result == 'success' || github.event.inputs.existing_webapp_url != '') && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
     needs: [deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
@@ -516,8 +507,9 @@ jobs:
     secrets: inherit
 
   cleanup-deployment:
-    # Cleanup for automatic triggers or when manually enabled (skip cleanup when using existing webapp URL)
-    if: always() && needs.deploy.result != 'skipped' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.cleanup_resources == 'true' && github.event.inputs.existing_webapp_url == ''))
+    # Cleanup when deploy succeeded and cleanup is not explicitly disabled
+    # Skip if webapp URL is provided (no resources to cleanup) or cleanup checkbox is unchecked
+    if: needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
     needs: [deploy]
     runs-on: ubuntu-latest
     env:
@@ -549,6 +541,7 @@ jobs:
           az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
 
       - name: Delete Docker Images from ACR
+        if: github.event.inputs.existing_webapp_url == ''
         run: |
           set -e
           echo "🗑️ Cleaning up Docker images from Azure Container Registry..."
