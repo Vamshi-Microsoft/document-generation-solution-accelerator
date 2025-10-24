@@ -510,7 +510,7 @@ jobs:
     # Cleanup when deploy succeeded and cleanup is not explicitly disabled
     # Skip if webapp URL is provided (no resources to cleanup) or cleanup checkbox is unchecked
     if: needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
-    needs: [deploy]
+    needs: [deploy, e2e-test]
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
