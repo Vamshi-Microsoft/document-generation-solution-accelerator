@@ -508,7 +508,7 @@ jobs:
 
   e2e-test:
     # Run e2e tests for automatic triggers, when manually enabled, or when existing webapp URL is provided
-    if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == true || github.event.inputs.run_e2e_tests == null || github.event.inputs.existing_webapp_url != '')
+    if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null || github.event.inputs.existing_webapp_url != '')
     needs: [deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
