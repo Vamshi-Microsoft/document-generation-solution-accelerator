@@ -68,16 +68,71 @@ env:
   BUILD_DOCKER_IMAGE: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build_docker_image || false) || false }}
 
 jobs:
+  docker-build:
+    # Only run if BUILD_DOCKER_IMAGE is true and not using existing webapp URL
+    if: github.event.inputs.build_docker_image == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
+    runs-on: ubuntu-latest
+    outputs:
+      IMAGE_TAG: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Generate Unique Docker Image Tag
+        id: generate_docker_tag
+        run: |
+          echo "🔨 Building new Docker image - generating unique tag..."
+          # Generate unique tag for manual deployment runs
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          RUN_ID="${{ github.run_id }}"
+          BRANCH_NAME="${{ env.BRANCH_NAME }}"
+          # Sanitize branch name for Docker tag (replace invalid characters with hyphens)
+          CLEAN_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
+          UNIQUE_TAG="${CLEAN_BRANCH_NAME}-${TIMESTAMP}-${RUN_ID}"
+          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
+          echo "Generated unique Docker tag: $UNIQUE_TAG"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure Container Registry
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.ACR_TEST_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_TEST_USERNAME }}
+          password: ${{ secrets.ACR_TEST_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        id: build_push_image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          file: ./src/WebApp.Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
+            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
+
+      - name: Verify Docker Image Build
+        run: |
+          echo "✅ Docker image successfully built and pushed"
+          echo "Image tag: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}"
+          echo "Run number: ${{ github.run_number }}"
+
   deploy:
     # Skip deployment if an existing webapp URL is provided
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null
+    # If docker build is needed, wait for it to complete
+    # Allow deploy to run even if docker-build is skipped (when BUILD_DOCKER_IMAGE is false)
+    if: always() && (needs.docker-build.result == 'success' || needs.docker-build.result == 'skipped') && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
+    needs: [docker-build]
     runs-on: ubuntu-latest
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
       WEBAPP_URL: ${{ steps.get_output.outputs.WEBAPP_URL }}
       ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
-      IMAGE_TAG: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
+      IMAGE_TAG: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}
     env:
       # For automatic triggers: force Non-WAF + Non-EXP, for manual dispatch: use inputs
       WAF_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.waf_enabled || false) || false }}
@@ -245,21 +300,16 @@ jobs:
           echo "SOLUTION_PREFIX=${UNIQUE_SOLUTION_PREFIX}" >> $GITHUB_ENV
           echo "Generated SOLUTION_PREFIX: ${UNIQUE_SOLUTION_PREFIX}" 
 
-      - name: Generate Unique Docker Image Tag
-        id: generate_docker_tag
+      - name: Determine Docker Image Tag
+        id: determine_image_tag
         run: |
           if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
-            echo "🔨 Building new Docker image - generating unique tag..."
-            # Generate unique tag for manual deployment runs
-            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-            RUN_ID="${{ github.run_id }}"
-            BRANCH_NAME="${{ env.BRANCH_NAME }}"
-            # Sanitize branch name for Docker tag (replace invalid characters with hyphens)
-            CLEAN_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g')
-            UNIQUE_TAG="${CLEAN_BRANCH_NAME}-${TIMESTAMP}-${RUN_ID}"
-            echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_ENV
-            echo "IMAGE_TAG=$UNIQUE_TAG" >> $GITHUB_OUTPUT
-            echo "Generated unique Docker tag: $UNIQUE_TAG"
+            echo "🔨 Using newly built Docker image..."
+            # Use the tag from the docker-build job
+            IMAGE_TAG="${{ needs.docker-build.outputs.IMAGE_TAG }}"
+            echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+            echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
+            echo "Using Docker image tag from build job: $IMAGE_TAG"
           else
             echo "🏷️ Using existing Docker image based on branch..."
             BRANCH_NAME="${{ env.BRANCH_NAME }}"
@@ -284,37 +334,6 @@ jobs:
             echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
             echo "Using existing Docker image tag: $IMAGE_TAG"
           fi
-
-      - name: Set up Docker Buildx
-        if: env.BUILD_DOCKER_IMAGE == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Azure Container Registry
-        if: env.BUILD_DOCKER_IMAGE == 'true'
-        uses: azure/docker-login@v2
-        with:
-          login-server: ${{ secrets.ACR_TEST_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_TEST_USERNAME }}
-          password: ${{ secrets.ACR_TEST_PASSWORD }}
-
-      - name: Build and Push Docker Image
-        if: env.BUILD_DOCKER_IMAGE == 'true'
-        id: build_push_image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./src
-          file: ./src/WebApp.Dockerfile
-          push: true
-          tags: |
-            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}
-            ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}_${{ github.run_number }}
-
-      - name: Verify Docker Image Build
-        if: env.BUILD_DOCKER_IMAGE == 'true'
-        run: |
-          echo "✅ Docker image successfully built and pushed"
-          echo "Image tag: ${{ env.IMAGE_TAG }}"
-          echo "Run number: ${{ github.run_number }}"
 
       - name: Generate Unique Environment Name
         id: generate_env_name
@@ -345,9 +364,9 @@ jobs:
       - name: Display Docker Image Tag
         run: |
           echo "=== Docker Image Information ==="
-          echo "Docker Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "Docker Image Tag: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
           echo "Registry: ${{ secrets.ACR_TEST_LOGIN_SERVER }}"
-          echo "Full Image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+          echo "Full Image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
           echo "================================"
 
       - name: Deploy using azd up and extract values (${{ github.event.inputs.waf_enabled == 'true' && 'WAF' || 'Non-WAF' }}+${{ (github.event.inputs.EXP == 'true' || github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' || github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '') && 'EXP' || 'Non-EXP' }})
@@ -357,7 +376,7 @@ jobs:
           echo "Starting azd deployment..."
           echo "WAF Enabled: ${{ env.WAF_ENABLED }}"
           echo "EXP: ${{ env.EXP }}"
-          echo "Using Docker Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "Using Docker Image Tag: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
           
           # Install azd (Azure Developer CLI)
           curl -fsSL https://aka.ms/install-azd.sh | bash
@@ -376,7 +395,7 @@ jobs:
           azd env set AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
-          azd env set AZURE_ENV_IMAGETAG="${{ env.IMAGE_TAG }}"
+          azd env set AZURE_ENV_IMAGETAG="${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
           azd env set AZURE_DEV_COLLECT_TELEMETRY="no"
           
           # Set ACR name only when building Docker image
@@ -510,13 +529,15 @@ jobs:
     # Cleanup when deploy succeeded and cleanup is not explicitly disabled
     # Skip if webapp URL is provided (no resources to cleanup) or cleanup checkbox is unchecked
     if: needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
-    needs: [deploy, e2e-test]
+    needs: [docker-build, deploy, e2e-test]
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
       AZURE_LOCATION: ${{ needs.deploy.outputs.AZURE_LOCATION }}
       ENV_NAME: ${{ needs.deploy.outputs.ENV_NAME }}
       IMAGE_TAG: ${{ needs.deploy.outputs.IMAGE_TAG }}
+      # Get the image tag from docker-build job if it ran, otherwise from deploy job
+      DOCKER_IMAGE_TAG: ${{ needs.docker-build.outputs.IMAGE_TAG || needs.deploy.outputs.IMAGE_TAG }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -546,22 +567,26 @@ jobs:
           set -e
           echo "🗑️ Cleaning up Docker images from Azure Container Registry..."
           
-          if [[ -n "${{ env.IMAGE_TAG }}" && "${{ env.IMAGE_TAG }}" != "latest_waf" ]]; then
-            echo "Deleting Docker images with tag: ${{ env.IMAGE_TAG }}"
+          # Use DOCKER_IMAGE_TAG which gets the tag from docker-build job if it ran
+          CLEANUP_IMAGE_TAG="${{ env.DOCKER_IMAGE_TAG }}"
+          
+          if [[ -n "$CLEANUP_IMAGE_TAG" && "$CLEANUP_IMAGE_TAG" != "latest_waf" && "$CLEANUP_IMAGE_TAG" != "dev" && "$CLEANUP_IMAGE_TAG" != "demo" ]]; then
+            echo "Deleting Docker images with tag: $CLEANUP_IMAGE_TAG"
             
             # Delete the main image
-            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}"
+            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:$CLEANUP_IMAGE_TAG"
             az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
-              --image webapp:${{ env.IMAGE_TAG }} --yes || echo "Warning: Failed to delete main image or image not found"
+              --image webapp:$CLEANUP_IMAGE_TAG --yes || echo "Warning: Failed to delete main image or image not found"
             
             # Delete the image with run number suffix
-            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }}"
+            echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${CLEANUP_IMAGE_TAG}_${{ github.run_number }}"
             az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
-              --image webapp:${{ env.IMAGE_TAG }}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
+              --image webapp:${CLEANUP_IMAGE_TAG}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
             
             echo "✅ Docker images cleanup completed"
           else
-            echo "⚠️ Skipping Docker image cleanup (using latest_waf or no custom image tag)"
+            echo "⚠️ Skipping Docker image cleanup (using standard branch image or no custom image tag)"
+            echo "Image tag: $CLEANUP_IMAGE_TAG"
           fi
 
       - name: Select Environment
