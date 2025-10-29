@@ -69,20 +69,17 @@ env:
 
 jobs:
   docker-build:
-    # ============================================================================
-    # DOCKER BUILD JOB - When does it run?
-    # ============================================================================
-    # ✅ RUNS ONLY WHEN:
-    #    - Trigger = Manual (workflow_dispatch) 
-    #    AND "Build and push Docker image" checkbox = ✅ CHECKED
-    #
-    # ❌ SKIPPED WHEN:
-    #    - Any automatic trigger (Pull Request, Schedule, Workflow Run)
-    #    - Manual trigger but "Build and push Docker image" = ❌ UNCHECKED
-    #    - Manual trigger but checkbox not provided (defaults to false)
-    #
-    # SIMPLE RULE: Only builds Docker when you manually trigger AND check the box!
-    # ============================================================================
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 📊 ALL POSSIBLE SCENARIOS & OUTCOMES:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # | Trigger Type | Build Setting | RESULT     | Image Used/Created        |
+    # |-------------|---------------|------------|---------------------------|
+    # | Auto        | N/A           | ❌ SKIP    | latest_waf/dev/demo      |
+    # | Manual      | null/false    | ❌ SKIP    | latest_waf/dev/demo      |
+    # | Manual      | ✅ true       | ✅ RUN     | custom-{timestamp}-{id}  |
+    # | Manual      | ❌ false      | ❌ SKIP    | latest_waf/dev/demo      |
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_docker_image == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -134,20 +131,18 @@ jobs:
           echo "Run number: ${{ github.run_number }}"
 
   deploy:
-    # ============================================================================
-    # DEPLOY JOB - When does it run?
-    # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - ANY automatic trigger (Pull Request, Schedule, Workflow Run) = ALWAYS RUNS
-    #    - Manual trigger with "Existing WebApp URL" = EMPTY/BLANK
-    #    - Manual trigger with "Existing WebApp URL" = NOT PROVIDED
-    #
-    # ❌ SKIPPED WHEN:
-    #    - Manual trigger with "Existing WebApp URL" = PROVIDED/FILLED
-    #      (Why skip? Because you want to test existing app, not deploy new one!)
-    #
-    # SIMPLE RULE: Deploys new infrastructure unless you provide existing webapp URL!
-    # ============================================================================
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 📊 ALL POSSIBLE SCENARIOS & OUTCOMES:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # | Trigger | Existing URL | Docker Status | RESULT    | Infrastructure    |
+    # |---------|-------------|---------------|-----------|-------------------|
+    # | Auto    | N/A         | SKIPPED       | ✅ RUN    | New (branch img)  |
+    # | Manual  | Empty       | SKIPPED       | ✅ RUN    | New (branch img)  |
+    # | Manual  | Empty       | SUCCESS       | ✅ RUN    | New (custom img)  |
+    # | Manual  | Empty       | FAILED        | ✅ RUN    | ⚠️ Will fail       |
+    # | Manual  | PROVIDED    | Any           | ❌ SKIP   | Use existing      |
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
     if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
     needs: [docker-build]  # Add dependency on docker-build job (will be skipped if not needed)
     runs-on: ubuntu-latest
@@ -157,6 +152,12 @@ jobs:
       ENV_NAME: ${{ steps.generate_env_name.outputs.ENV_NAME }}
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
       IMAGE_TAG: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}
+      AI_FOUNDRY_RESOURCE_ID: ${{ steps.get_output.outputs.AI_FOUNDRY_RESOURCE_ID }}
+      AI_SEARCH_SERVICE_NAME: ${{ steps.get_output.outputs.AI_SEARCH_SERVICE_NAME }}
+      COSMOS_DB_ACCOUNT_NAME: ${{ steps.get_output.outputs.COSMOS_DB_ACCOUNT_NAME }}
+      STORAGE_ACCOUNT_NAME: ${{ steps.get_output.outputs.STORAGE_ACCOUNT_NAME }}
+      STORAGE_CONTAINER_NAME: ${{ steps.get_output.outputs.STORAGE_CONTAINER_NAME }}
+      KEY_VAULT_NAME: ${{ steps.get_output.outputs.KEY_VAULT_NAME }}
     env:
       # For automatic triggers: force Non-WAF + Non-EXP, for manual dispatch: use inputs
       WAF_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.waf_enabled || false) || false }}
@@ -478,16 +479,22 @@ jobs:
           # Extract values from azd output (adjust these based on actual output variable names)
           export AI_FOUNDRY_RESOURCE_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.AI_FOUNDRY_RESOURCE_ID // empty')
           echo "AI_FOUNDRY_RESOURCE_ID=$AI_FOUNDRY_RESOURCE_ID" >> $GITHUB_ENV
+          echo "AI_FOUNDRY_RESOURCE_ID=$AI_FOUNDRY_RESOURCE_ID" >> $GITHUB_OUTPUT
           export AI_SEARCH_SERVICE_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.AI_SEARCH_SERVICE_NAME // empty')
           echo "AI_SEARCH_SERVICE_NAME=$AI_SEARCH_SERVICE_NAME" >> $GITHUB_ENV
+          echo "AI_SEARCH_SERVICE_NAME=$AI_SEARCH_SERVICE_NAME" >> $GITHUB_OUTPUT
           export COSMOS_DB_ACCOUNT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.COSMOS_DB_ACCOUNT_NAME // empty')
           echo "COSMOS_DB_ACCOUNT_NAME=$COSMOS_DB_ACCOUNT_NAME" >> $GITHUB_ENV
+          echo "COSMOS_DB_ACCOUNT_NAME=$COSMOS_DB_ACCOUNT_NAME" >> $GITHUB_OUTPUT
           export STORAGE_ACCOUNT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.STORAGE_ACCOUNT_NAME // empty')
           echo "STORAGE_ACCOUNT_NAME=$STORAGE_ACCOUNT_NAME" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=$STORAGE_ACCOUNT_NAME" >> $GITHUB_OUTPUT
           export STORAGE_CONTAINER_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.STORAGE_CONTAINER_NAME // empty')
           echo "STORAGE_CONTAINER_NAME=$STORAGE_CONTAINER_NAME" >> $GITHUB_ENV
+          echo "STORAGE_CONTAINER_NAME=$STORAGE_CONTAINER_NAME" >> $GITHUB_OUTPUT
           export KEY_VAULT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.KEY_VAULT_NAME // empty')
           echo "KEY_VAULT_NAME=$KEY_VAULT_NAME" >> $GITHUB_ENV
+          echo "KEY_VAULT_NAME=$KEY_VAULT_NAME" >> $GITHUB_OUTPUT
           export SQL_SERVER_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.SQLDB_SERVER_NAME // empty')
           echo "SQL_SERVER_NAME=$SQL_SERVER_NAME" >> $GITHUB_ENV
           export SQL_DATABASE=$(echo "$DEPLOY_OUTPUT" | jq -r '.SQLDB_DATABASE // empty')
@@ -514,7 +521,81 @@ jobs:
           # fi
 
           sleep 30
-      
+
+      - name: Logout from Azure
+        if: always()
+        run: |
+          az logout
+          echo "Logged out from Azure."
+
+      - name: Send Notification
+        if: always()
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          WEBAPP_URL="${{ steps.get_output.outputs.WEBAPP_URL }}"
+          RESOURCE_GROUP="${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}"
+          IMAGE_TAG="${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
+          IS_SUCCESS=${{ job.status == 'success' }}
+          
+          # Construct the email body based on deployment result
+          if [ "$IS_SUCCESS" = "true" ]; then
+            EMAIL_BODY=$(cat <<EOF
+            {
+              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a></p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
+              "subject": "DocGen Deployment - Success"
+            }
+          EOF
+            )
+          else
+            EMAIL_BODY=$(cat <<EOF
+            {
+              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}</p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the matter at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
+              "subject": "DocGen Deployment - Failure"
+            }
+          EOF
+            )
+          fi
+
+          # Send the notification
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send notification"
+
+  post-deployment:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 📊 POST-DEPLOYMENT SCRIPT EXECUTION:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # | Deploy Status | Existing URL | RESULT    | Action                        |
+    # |---------------|--------------|-----------|-------------------------------|
+    # | ✅ Success    | Empty        | ✅ RUN    | Process sample data           |
+    # | ❌ Failed     | Any          | ❌ SKIP   | No deployment to process      |
+    # | ❌ Skipped    | PROVIDED     | ❌ SKIP   | Using existing deployment     |
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
+    if: needs.deploy.result == 'success' && github.event.inputs.existing_webapp_url == ''
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    env:
+      STORAGE_ACCOUNT_NAME: ${{ needs.deploy.outputs.STORAGE_ACCOUNT_NAME }}
+      STORAGE_CONTAINER_NAME: ${{ needs.deploy.outputs.STORAGE_CONTAINER_NAME }}
+      KEY_VAULT_NAME: ${{ needs.deploy.outputs.KEY_VAULT_NAME }}
+      COSMOS_DB_ACCOUNT_NAME: ${{ needs.deploy.outputs.COSMOS_DB_ACCOUNT_NAME }}
+      RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
+      AI_SEARCH_SERVICE_NAME: ${{ needs.deploy.outputs.AI_SEARCH_SERVICE_NAME }}
+      AI_FOUNDRY_RESOURCE_ID: ${{ needs.deploy.outputs.AI_FOUNDRY_RESOURCE_ID }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az --version
+
+      - name: Login to Azure
+        run: |
+          az login --service-principal -u ${{ secrets.AZURE_CLIENT_ID }} -p ${{ secrets.AZURE_CLIENT_SECRET }} --tenant ${{ secrets.AZURE_TENANT_ID }}
+
       - name: Run Post-Deployment Script
         id: post_deploy
         env: 
@@ -542,46 +623,44 @@ jobs:
           echo "Logged out from Azure."
 
   e2e-test:
-    # ============================================================================
-    # E2E TEST JOB - When does it run?
-    # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - Deploy job succeeded AND "Run end-to-end tests" = ✅ CHECKED (default)
-    #    - Manual trigger with "Existing WebApp URL" provided AND tests = ✅ CHECKED
-    #    - Any automatic trigger (tests always run by default if deploy succeeds)
-    #
-    # ❌ SKIPPED WHEN:
-    #    - Deploy job failed or was skipped
-    #    - Manual trigger with "Run end-to-end tests" = ❌ UNCHECKED
-    #    - No webapp available (neither deployed nor existing URL provided)
-    #
-    # SIMPLE RULE: Tests run against any available webapp unless you uncheck the box!
-    # ============================================================================
-    if: (needs.deploy.result == 'success' || github.event.inputs.existing_webapp_url != '') && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
-    needs: [deploy]
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 📊 ALL POSSIBLE SCENARIOS & OUTCOMES:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # | Trigger | Deploy  | Existing URL | E2E Setting | RESULT    | Test Target      |
+    # |---------|---------|--------------|-------------|-----------|------------------|
+    # | Auto    | ✅ Pass  | N/A          | N/A (auto)  | ✅ RUN    | New webapp       |
+    # | Auto    | ❌ Fail  | N/A          | N/A         | ❌ SKIP   | None available   |
+    # | Manual  | ✅ Pass  | Empty        | null/true   | ✅ RUN    | New webapp       |
+    # | Manual  | ✅ Pass  | Empty        | ❌ false    | ❌ SKIP   | User disabled    |
+    # | Manual  | ❌ Skip  | PROVIDED     | null/true   | ✅ RUN    | Existing webapp  |
+    # | Manual  | ❌ Skip  | PROVIDED     | ❌ false    | ❌ SKIP   | User disabled    |
+    # | Manual  | ❌ Fail  | PROVIDED     | null/true   | ✅ RUN    | Existing webapp  |
+    # | Manual  | ❌ Fail  | Empty        | Any         | ❌ SKIP   | No webapp        |
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
+    if: (needs.post-deployment.result == 'success' || github.event.inputs.existing_webapp_url != '') && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
+    needs: [deploy, post-deployment]
     uses: ./.github/workflows/test-automation.yml
     with:
       DOCGEN_URL: ${{ github.event.inputs.existing_webapp_url || needs.deploy.outputs.WEBAPP_URL }}
     secrets: inherit
 
   cleanup-deployment:
-    # ============================================================================
-    # CLEANUP JOB - When does it run?
-    # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - Deploy job succeeded (created new resources to clean up)
-    #    - Resource group was created (has RESOURCE_GROUP_NAME output)
-    #    - "Existing WebApp URL" = EMPTY (means we deployed new stuff to clean)
-    #    - "Cleanup deployed resources" = ✅ CHECKED (default) OR not manual trigger
-    #
-    # ❌ SKIPPED WHEN:
-    #    - Deploy job failed (nothing to clean up)
-    #    - "Existing WebApp URL" provided (didn't deploy new resources)
-    #    - Manual trigger with "Cleanup deployed resources" = ❌ UNCHECKED
-    #    - No resource group name available (deployment didn't create resources)
-    #
-    # SIMPLE RULE: Cleans up newly deployed resources unless you uncheck the box!
-    # ============================================================================
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 📊 ALL POSSIBLE SCENARIOS & OUTCOMES:
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # | Trigger    | Deploy  | RG Exists  | Existing URL  | Cleanup Setting | RESULT  |
+    # |------------|---------|------------|---------------|-----------------|---------|
+    # | Auto       | ✅ Pass | ✅ Yes    | ❌ Empty     | N/A (auto=yes)  | ✅ RUN  |
+    # | Auto       | ❌ Fail | ❌ No     | ❌ Empty     | N/A             | ❌ SKIP |
+    # | Manual     | ✅ Pass | ✅ Yes    | ❌ Empty     | null (default)  | ❌ SKIP |
+    # | Manual     | ✅ Pass | ✅ Yes    | ❌ Empty     | ✅ true         | ✅ RUN  |
+    # | Manual     | ✅ Pass | ✅ Yes    | ❌ Empty     | ❌ false        | ❌ SKIP |
+    # | Manual     | ❌ Skip | ❌ No     | ✅ Provided  | Any             | ❌ SKIP |
+    # | Manual     | ❌ Fail | ❌ No     | ❌ Empty     | Any             | ❌ SKIP |
+    # | Manual     | ✅ Pass | ❌ No     | ❌ Empty     | ✅ true         | ❌ SKIP |
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
     if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
     needs: [docker-build, deploy, e2e-test]
     runs-on: ubuntu-latest
@@ -635,13 +714,6 @@ jobs:
             echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:$IMAGE_TAG"
             az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
               --image webapp:$IMAGE_TAG --yes || echo "Warning: Failed to delete main image or image not found"
-            
-            # Delete the image with run number suffix (only if it was a custom build)
-            if [[ "${{ needs.docker-build.result }}" == "success" ]]; then
-              echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${IMAGE_TAG}_${{ github.run_number }}"
-              az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
-                --image webapp:${IMAGE_TAG}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
-            fi
             
             echo "✅ Docker images cleanup completed"
           else
