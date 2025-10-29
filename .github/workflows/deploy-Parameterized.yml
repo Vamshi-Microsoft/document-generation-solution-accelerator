@@ -480,39 +480,19 @@ jobs:
           echo "AI_FOUNDRY_RESOURCE_ID=$AI_FOUNDRY_RESOURCE_ID" >> $GITHUB_ENV
           export AI_SEARCH_SERVICE_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.AI_SEARCH_SERVICE_NAME // empty')
           echo "AI_SEARCH_SERVICE_NAME=$AI_SEARCH_SERVICE_NAME" >> $GITHUB_ENV
-          export COSMOS_DB_ACCOUNT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.COSMOS_DB_ACCOUNT_NAME // empty')
-          echo "COSMOS_DB_ACCOUNT_NAME=$COSMOS_DB_ACCOUNT_NAME" >> $GITHUB_ENV
+          export AZURE_COSMOSDB_ACCOUNT=$(echo "$DEPLOY_OUTPUT" | jq -r '.AZURE_COSMOSDB_ACCOUNT // empty')
+          echo "AZURE_COSMOSDB_ACCOUNT=$AZURE_COSMOSDB_ACCOUNT" >> $GITHUB_ENV
           export STORAGE_ACCOUNT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.STORAGE_ACCOUNT_NAME // empty')
           echo "STORAGE_ACCOUNT_NAME=$STORAGE_ACCOUNT_NAME" >> $GITHUB_ENV
           export STORAGE_CONTAINER_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.STORAGE_CONTAINER_NAME // empty')
           echo "STORAGE_CONTAINER_NAME=$STORAGE_CONTAINER_NAME" >> $GITHUB_ENV
           export KEY_VAULT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.KEY_VAULT_NAME // empty')
           echo "KEY_VAULT_NAME=$KEY_VAULT_NAME" >> $GITHUB_ENV
-          export SQL_SERVER_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.SQLDB_SERVER_NAME // empty')
-          echo "SQL_SERVER_NAME=$SQL_SERVER_NAME" >> $GITHUB_ENV
-          export SQL_DATABASE=$(echo "$DEPLOY_OUTPUT" | jq -r '.SQLDB_DATABASE // empty')
-          echo "SQL_DATABASE=$SQL_DATABASE" >> $GITHUB_ENV
-          export CLIENT_ID=$(echo "$DEPLOY_OUTPUT" | jq -r '.MANAGEDIDENTITY_SQL_CLIENTID // empty')
-          echo "CLIENT_ID=$CLIENT_ID" >> $GITHUB_ENV
-          export CLIENT_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.MANAGEDIDENTITY_SQL_NAME // empty')
-          echo "CLIENT_NAME=$CLIENT_NAME" >> $GITHUB_ENV
-          export MANAGEDIDENTITY_WEBAPP_CLIENTID=$(echo "$DEPLOY_OUTPUT" | jq -r '.MANAGEDIDENTITY_WEBAPP_CLIENTID // empty')
-          echo "MANAGEDIDENTITY_WEBAPP_CLIENTID=$MANAGEDIDENTITY_WEBAPP_CLIENTID" >> $GITHUB_ENV
           export RESOURCE_GROUP_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.RESOURCE_GROUP_NAME // .AZURE_RESOURCE_GROUP // empty')
           [[ -z "$RESOURCE_GROUP_NAME" ]] && export RESOURCE_GROUP_NAME="$RESOURCE_GROUP_NAME"
           echo "RESOURCE_GROUP_NAME=$RESOURCE_GROUP_NAME" >> $GITHUB_ENV
           WEBAPP_URL=$(echo "$DEPLOY_OUTPUT" | jq -r '.WEB_APP_URL // .SERVICE_BACKEND_ENDPOINT_URL // empty')
           echo "WEBAPP_URL=$WEBAPP_URL" >> $GITHUB_OUTPUT
-          WEB_APP_NAME=$(echo "$DEPLOY_OUTPUT" | jq -r '.WEB_APP_NAME // .SERVICE_BACKEND_NAME // empty')
-          echo "WEB_APP_NAME=$WEB_APP_NAME" >> $GITHUB_ENV
-          
-          # echo "🔧 Disabling AUTH_ENABLED for the web app..."
-          # if [[ -n "$WEB_APP_NAME" && -n "$RESOURCE_GROUP_NAME" ]]; then
-          #   az webapp config appsettings set -g "$RESOURCE_GROUP_NAME" -n "$WEB_APP_NAME" --settings AUTH_ENABLED=false
-          # else
-          #   echo "Warning: Could not disable AUTH_ENABLED - WEB_APP_NAME or RESOURCE_GROUP_NAME not found"
-          # fi
-
           sleep 30
       
       - name: Run Post-Deployment Script
@@ -529,7 +509,7 @@ jobs:
             "$STORAGE_ACCOUNT_NAME" \
             "$STORAGE_CONTAINER_NAME" \
             "$KEY_VAULT_NAME" \
-            "$COSMOS_DB_ACCOUNT_NAME" \
+            "$AZURE_COSMOSDB_ACCOUNT" \
             "$RESOURCE_GROUP_NAME" \
             "$AI_SEARCH_SERVICE_NAME" \
             "${{ secrets.AZURE_CLIENT_ID }}" \
@@ -540,6 +520,38 @@ jobs:
         run: |
           az logout
           echo "Logged out from Azure."
+
+      - name: Send Notification
+        if: always()
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          WEBAPP_URL="${{ steps.get_output.outputs.WEBAPP_URL }}"
+          RESOURCE_GROUP="${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}"
+          IMAGE_TAG="${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
+          IS_SUCCESS=${{ job.status == 'success' }}
+          
+          # Construct the email body based on deployment result
+          if [ "$IS_SUCCESS" = "true" ]; then
+            EMAIL_BODY=$(cat <<EOF
+            {
+              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a></p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
+              "subject": "DocGen Deployment - Success"
+            }
+          EOF
+            )
+          else
+            EMAIL_BODY=$(cat <<EOF
+            {
+              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}</p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the matter at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
+              "subject": "DocGen Deployment - Failure"
+            }
+          EOF
+            )
+          fi
+          # Send the notification
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send notification"
 
   e2e-test:
     # ============================================================================
