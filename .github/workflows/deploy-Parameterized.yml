@@ -149,7 +149,6 @@ jobs:
     # SIMPLE RULE: Deploys new infrastructure unless you provide existing webapp URL!
     # ============================================================================
     if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
-    needs: [docker-build]  # Add dependency on docker-build job (will be skipped if not needed)
     runs-on: ubuntu-latest
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
@@ -660,8 +659,9 @@ jobs:
             echo "⚠️ Skipping Docker image cleanup (using standard branch image: $IMAGE_TAG)"
           fi
 
-      - name: Select Environment
+      - name: Select Environment and Delete deployment using azd
         run: |
+          set -e
           # Try to select the environment if it exists, otherwise create a minimal environment for cleanup
           azd env list
           if azd env list | grep -q "${{ env.ENV_NAME }}"; then
@@ -676,9 +676,6 @@ jobs:
             azd env set AZURE_LOCATION="${{ env.AZURE_LOCATION }}"
           fi
 
-      - name: Delete deployment using azd
-        run: |
-          set -e
           echo "Deleting deployment..."
           azd down --purge --force --no-prompt
           echo "Deployment deleted successfully."
