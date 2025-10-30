@@ -70,18 +70,19 @@ env:
 jobs:
   docker-build:
     # ============================================================================
-    # DOCKER BUILD JOB - When does it run?
+    # DOCKER BUILD JOB SCENARIOS
     # ============================================================================
-    # ✅ RUNS ONLY WHEN:
-    #    - Trigger = Manual (workflow_dispatch) 
-    #    AND "Build and push Docker image" checkbox = ✅ CHECKED
+    # Condition: Manual trigger + "Build Docker image" checkbox checked
     #
-    # ❌ SKIPPED WHEN:
-    #    - Any automatic trigger (Pull Request, Schedule, Workflow Run)
-    #    - Manual trigger but "Build and push Docker image" = ❌ UNCHECKED
-    #    - Manual trigger but checkbox not provided (defaults to false)
+    # | Trigger Type    | Build Checkbox | Result   | Image Used            |
+    # |-----------------|----------------|----------|-----------------------|
+    # | Pull Request    | N/A            | ❌ SKIP  | Branch image          |
+    # | Schedule        | N/A            | ❌ SKIP  | latest_waf            |
+    # | Workflow Run    | N/A            | ❌ SKIP  | Branch image          |
+    # | Manual          | ✅ Checked     | ✅ RUN   | Custom unique tag     |
+    # | Manual          | ❌ Unchecked   | ❌ SKIP  | Branch image          |
     #
-    # SIMPLE RULE: Only builds Docker when you manually trigger AND check the box!
+    # Output: IMAGE_TAG (if runs) → Used by deploy job for custom deployments
     # ============================================================================
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_docker_image == 'true'
     runs-on: ubuntu-latest
@@ -135,18 +136,19 @@ jobs:
 
   deploy:
     # ============================================================================
-    # DEPLOY JOB - When does it run?
+    # DEPLOY JOB SCENARIOS
     # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - ANY automatic trigger (Pull Request, Schedule, Workflow Run) = ALWAYS RUNS
-    #    - Manual trigger with "Existing WebApp URL" = EMPTY/BLANK
-    #    - Manual trigger with "Existing WebApp URL" = NOT PROVIDED
+    # Condition: Auto trigger OR Manual with no existing webapp URL
     #
-    # ❌ SKIPPED WHEN:
-    #    - Manual trigger with "Existing WebApp URL" = PROVIDED/FILLED
-    #      (Why skip? Because you want to test existing app, not deploy new one!)
+    # | Trigger Type    | Existing URL    | Result   | Purpose                |
+    # |-----------------|-----------------|----------|------------------------|
+    # | Pull Request    | N/A             | ✅ RUN   | Test PR changes        |
+    # | Schedule        | N/A             | ✅ RUN   | Regular validation     |
+    # | Workflow Run    | N/A             | ✅ RUN   | Deploy after build     |
+    # | Manual          | Empty/None      | ✅ RUN   | Fresh deployment       |
+    # | Manual          | Provided URL    | ❌ SKIP  | Test existing only     |
     #
-    # SIMPLE RULE: Deploys new infrastructure unless you provide existing webapp URL!
+    # Dependencies: Waits for docker-build (uses always() if build skips)
     # ============================================================================
     if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
     needs: [docker-build]
@@ -555,22 +557,23 @@ jobs:
 
   e2e-test:
     # ============================================================================
-    # E2E TEST JOB - When does it run?
+    # E2E TEST JOB SCENARIOS
     # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - Deploy job succeeded AND "Run end-to-end tests" = ✅ CHECKED (default)
-    #    - Manual trigger with "Existing WebApp URL" provided AND tests = ✅ CHECKED
-    #    - Any automatic trigger (tests always run by default if deploy succeeds)
+    # Condition: Webapp available (deployed OR existing) AND tests enabled
     #
-    # ❌ SKIPPED WHEN:
-    #    - Deploy job failed or was skipped
-    #    - Manual trigger with "Run end-to-end tests" = ❌ UNCHECKED
-    #    - No webapp available (neither deployed nor existing URL provided)
+    # | Deploy Result | Existing URL | Test Checkbox    | Result   | Test Target    |
+    # |---------------|--------------|---------------   |----------|----------------|
+    # | Success       | N/A          | Auto/✅/Default | ✅ RUN   | Deployed URL   |
+    # | Success       | Provided     | Auto/✅/Default | ✅ RUN   | Existing URL   |
+    # | Failed        | Provided     | Auto/✅/Default | ✅ RUN   | Existing URL   |
+    # | Failed        | N/A          | Any              | ❌ SKIP  | No URL         |
+    # | Success       | N/A          | ❌ Unchecked    | ❌ SKIP  | Tests disabled |
+    # | Success       | Provided     | ❌ Unchecked    | ❌ SKIP  | Tests disabled |
     #
-    # SIMPLE RULE: Tests run against any available webapp unless you uncheck the box!
+    # URL Priority: existing_webapp_url || deployed WEBAPP_URL
     # ============================================================================
-    if: (needs.deploy.result == 'success' || github.event.inputs.existing_webapp_url != '') && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
-    needs: [deploy]
+    if: always() && ((needs.deploy.result == 'success' && needs.deploy.outputs.WEBAPP_URL != '') || (github.event.inputs.existing_webapp_url != '' && github.event.inputs.existing_webapp_url != null)) && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
+    needs: [docker-build, deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
       DOCGEN_URL: ${{ github.event.inputs.existing_webapp_url || needs.deploy.outputs.WEBAPP_URL }}
@@ -578,21 +581,20 @@ jobs:
 
   cleanup-deployment:
     # ============================================================================
-    # CLEANUP JOB - When does it run?
+    # CLEANUP JOB SCENARIOS
     # ============================================================================
-    # ✅ RUNS WHEN:
-    #    - Deploy job succeeded (created new resources to clean up)
-    #    - Resource group was created (has RESOURCE_GROUP_NAME output)
-    #    - "Existing WebApp URL" = EMPTY (means we deployed new stuff to clean)
-    #    - "Cleanup deployed resources" = ✅ CHECKED (default) OR not manual trigger
+    # Condition: Deploy succeeded + Resource group created + No existing URL + Cleanup enabled
     #
-    # ❌ SKIPPED WHEN:
-    #    - Deploy job failed (nothing to clean up)
-    #    - "Existing WebApp URL" provided (didn't deploy new resources)
-    #    - Manual trigger with "Cleanup deployed resources" = ❌ UNCHECKED
-    #    - No resource group name available (deployment didn't create resources)
+    # | Deploy Result | Resource Group | Existing URL | Cleanup Checkbox | Result   | Actions          |
+    # |---------------|----------------|--------------|------------------|----------|------------------|
+    # | Success       | Created        | N/A          | Auto/✅/Default   | ✅ RUN   | Delete RG + ACR  |
+    # | Success       | Created        | N/A          | ❌ Unchecked     | ❌ SKIP  | Keep resources   |
+    # | Success       | Created        | Provided     | Any              | ❌ SKIP  | No new resources |
+    # | Failed        | N/A            | Any          | Any              | ❌ SKIP  | Nothing to clean |
+    # | Success       | None           | Any          | Any              | ❌ SKIP  | No resources     |
     #
-    # SIMPLE RULE: Cleans up newly deployed resources unless you uncheck the box!
+    # Actions: Deletes resource group + custom Docker images (preserves standard tags)
+    # Dependencies: Waits for all jobs (docker-build, deploy, e2e-test)
     # ============================================================================
     if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
     needs: [docker-build, deploy, e2e-test]
