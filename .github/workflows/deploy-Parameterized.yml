@@ -149,6 +149,7 @@ jobs:
     # SIMPLE RULE: Deploys new infrastructure unless you provide existing webapp URL!
     # ============================================================================
     if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
+    needs: [docker-build]
     runs-on: ubuntu-latest
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
