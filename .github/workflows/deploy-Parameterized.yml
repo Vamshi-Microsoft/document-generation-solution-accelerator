@@ -660,8 +660,9 @@ jobs:
             echo "⚠️ Skipping Docker image cleanup (using standard branch image: $IMAGE_TAG)"
           fi
 
-      - name: Select Environment
+      - name: Select Environment and Delete deployment using azd
         run: |
+          set -e
           # Try to select the environment if it exists, otherwise create a minimal environment for cleanup
           azd env list
           if azd env list | grep -q "${{ env.ENV_NAME }}"; then
@@ -676,9 +677,6 @@ jobs:
             azd env set AZURE_LOCATION="${{ env.AZURE_LOCATION }}"
           fi
 
-      - name: Delete deployment using azd
-        run: |
-          set -e
           echo "Deleting deployment..."
           azd down --purge --force --no-prompt
           echo "Deployment deleted successfully."
