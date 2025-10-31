@@ -13,8 +13,13 @@ on:
       - demo
   workflow_dispatch:
     inputs:
+      resource_group_name:
+        description: 'Resource Group name (optional)'
+        required: false
+        default: ''
+        type: string
       run_e2e_tests:
-        description: 'Run end-to-end tests'
+        description: 'Run End-to-End tests'
         required: false
         default: true
         type: boolean
@@ -44,7 +49,7 @@ on:
         default: ''
         type: string
       existing_webapp_url:
-        description: 'Existing WebApp URL'
+        description: 'Existing WebApp URL (Skips deployment)'
         required: false
         default: ''
         type: string
@@ -53,6 +58,7 @@ on:
         required: false
         default: false
         type: boolean
+      
   schedule:
     - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
 env:
@@ -308,12 +314,18 @@ jobs:
       - name: Generate Resource Group Name
         id: generate_rg_name
         run: |
-          echo "Generating a unique resource group name..."
-          ACCL_NAME="docgen"  # Account name as specified
-          SHORT_UUID=$(uuidgen | cut -d'-' -f1)
-          UNIQUE_RG_NAME="arg-${ACCL_NAME}-${SHORT_UUID}"
-          echo "RESOURCE_GROUP_NAME=${UNIQUE_RG_NAME}" >> $GITHUB_ENV
-          echo "Generated RESOURCE_GROUP_NAME: ${UNIQUE_RG_NAME}"
+          # Check if a resource group name was provided as input
+          if [[ -n "${{ github.event.inputs.resource_group_name }}" ]]; then
+            echo "Using provided Resource Group name: ${{ github.event.inputs.resource_group_name }}"
+            echo "RESOURCE_GROUP_NAME=${{ github.event.inputs.resource_group_name }}" >> $GITHUB_ENV
+          else
+            echo "Generating a unique resource group name..."
+            ACCL_NAME="docgen"  # Account name as specified
+            SHORT_UUID=$(uuidgen | cut -d'-' -f1)
+            UNIQUE_RG_NAME="arg-${ACCL_NAME}-${SHORT_UUID}"
+            echo "RESOURCE_GROUP_NAME=${UNIQUE_RG_NAME}" >> $GITHUB_ENV
+            echo "Generated RESOURCE_GROUP_NAME: ${UNIQUE_RG_NAME}"
+          fi
 
       - name: Setup Azure Developer CLI
         run: |
@@ -333,13 +345,14 @@ jobs:
         id: check_create_rg
         run: |
           set -e  
-          echo "Checking if resource group exists..."
+          echo "🔍 Checking if resource group '$RESOURCE_GROUP_NAME' exists..."
           rg_exists=$(az group exists --name $RESOURCE_GROUP_NAME)
           if [ "$rg_exists" = "false" ]; then
-            echo "Resource group does not exist. Creating..."
-            az group create --name $RESOURCE_GROUP_NAME --location $AZURE_LOCATION || { echo "Error creating resource group"; exit 1; }
+            echo "📦 Resource group does not exist. Creating new resource group '$RESOURCE_GROUP_NAME' in location '$AZURE_LOCATION'..."
+            az group create --name $RESOURCE_GROUP_NAME --location $AZURE_LOCATION || { echo "❌ Error creating resource group"; exit 1; }
+            echo "✅ Resource group '$RESOURCE_GROUP_NAME' created successfully."
           else
-            echo "Resource group already exists."
+            echo "✅ Resource group '$RESOURCE_GROUP_NAME' already exists. Deploying to existing resource group."
           fi
           echo "RESOURCE_GROUP_NAME=$RESOURCE_GROUP_NAME" >> $GITHUB_OUTPUT
 
@@ -707,13 +720,6 @@ jobs:
             echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:$IMAGE_TAG"
             az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
               --image webapp:$IMAGE_TAG --yes || echo "Warning: Failed to delete main image or image not found"
-            
-            # Delete the image with run number suffix (only if it was a custom build)
-            if [[ "${{ needs.docker-build.result }}" == "success" ]]; then
-              echo "Deleting image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${IMAGE_TAG}_${{ github.run_number }}"
-              az acr repository delete --name $(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1) \
-                --image webapp:${IMAGE_TAG}_${{ github.run_number }} --yes || echo "Warning: Failed to delete run-numbered image or image not found"
-            fi
             
             echo "✅ Docker images cleanup completed"
           else
