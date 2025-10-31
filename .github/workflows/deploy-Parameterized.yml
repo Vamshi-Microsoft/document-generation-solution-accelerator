@@ -133,6 +133,32 @@ jobs:
           echo "✅ Docker image successfully built and pushed"
           echo "Image tag: ${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}"
           echo "Run number: ${{ github.run_number }}"
+      
+      - name: Generate Docker Build Summary
+        if: always()
+        run: |
+          echo "## 🐳 Docker Build Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Job Status** | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Full Image Path** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run Number** | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ env.BRANCH_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "### ✅ Build Details" >> $GITHUB_STEP_SUMMARY
+            echo "- Docker image successfully built and pushed to ACR" >> $GITHUB_STEP_SUMMARY
+            echo "- Generated unique tag: \`${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Available for deployment in subsequent jobs" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Docker build process encountered an error" >> $GITHUB_STEP_SUMMARY
+            echo "- Check the build logs for more details" >> $GITHUB_STEP_SUMMARY
+          fi
 
   deploy:
     # ============================================================================
@@ -555,6 +581,36 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send notification"
 
+      - name: Generate Deploy Job Summary
+        if: always()
+        run: |
+          echo "## 🚀 Deploy Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Job Status** | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment Name** | \`${{ steps.generate_env_name.outputs.ENV_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | \`${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Azure Region** | \`${{ steps.set_region.outputs.AZURE_LOCATION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Docker Image Tag** | \`${{ steps.determine_image_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **WAF Enabled** | ${{ env.WAF_ENABLED == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **EXP Enabled** | ${{ env.EXP == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ env.BRANCH_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "### ✅ Deployment Details" >> $GITHUB_STEP_SUMMARY
+            echo "- **Web App URL**: [${{ steps.get_output.outputs.WEBAPP_URL }}](${{ steps.get_output.outputs.WEBAPP_URL }})" >> $GITHUB_STEP_SUMMARY
+            echo "- **Configuration**: ${{ env.WAF_ENABLED == 'true' && 'WAF' || 'Non-WAF' }}+${{ env.EXP == 'true' && 'EXP' || 'Non-EXP' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Successfully deployed to Azure with all resources configured" >> $GITHUB_STEP_SUMMARY
+            echo "- Post-deployment scripts executed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Deployment process encountered an error" >> $GITHUB_STEP_SUMMARY
+            echo "- Check the deployment logs for more details" >> $GITHUB_STEP_SUMMARY
+            echo "- Verify quota availability and permissions" >> $GITHUB_STEP_SUMMARY
+          fi
+
   e2e-test:
     # ============================================================================
     # E2E TEST JOB SCENARIOS
@@ -712,3 +768,34 @@ jobs:
           azd auth logout
           az logout || echo "Warning: Failed to logout from Azure CLI"
           echo "Logged out from Azure."
+      - name: Generate Cleanup Job Summary
+        if: always()
+        run: |
+          echo "## 🧹 Cleanup Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Job Status** | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | \`${{ env.RESOURCE_GROUP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment Name** | \`${{ env.ENV_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Azure Region** | \`${{ env.AZURE_LOCATION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Docker Image Tag** | \`${{ env.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ env.BRANCH_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "### ✅ Cleanup Details" >> $GITHUB_STEP_SUMMARY
+            echo "- Successfully deleted Azure resource group: \`${{ env.RESOURCE_GROUP_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Cleaned up AZD environment: \`${{ env.ENV_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ env.IMAGE_TAG }}" != "latest_waf" && "${{ env.IMAGE_TAG }}" != "dev" && "${{ env.IMAGE_TAG }}" != "demo" ]]; then
+              echo "- Removed custom Docker images from ACR with tag: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- Preserved standard Docker images (using branch tag: \`${{ env.IMAGE_TAG }}\`)" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "- All deployed resources have been successfully cleaned up" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Cleanup Failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Cleanup process encountered an error" >> $GITHUB_STEP_SUMMARY
+            echo "- Some resources may still exist in Azure" >> $GITHUB_STEP_SUMMARY
+            echo "- Manual cleanup may be required" >> $GITHUB_STEP_SUMMARY
+          fi

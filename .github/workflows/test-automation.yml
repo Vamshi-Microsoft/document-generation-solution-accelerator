@@ -114,3 +114,53 @@ jobs:
           curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send notification"
+            
+      - name: Generate E2E Test Summary
+        if: always()
+        run: |
+          echo "## 🧪 E2E Test Job Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Determine overall test result
+          OVERALL_SUCCESS="${{ steps.test1.outcome == 'success' || steps.test2.outcome == 'success' || steps.test3.outcome == 'success' }}"
+          if [[ "$OVERALL_SUCCESS" == "true" ]]; then
+            echo "| **Job Status** | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Job Status** | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "| **Target URL** | [${{ env.url }}](${{ env.url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Accelerator** | ${{ env.accelerator_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Python Version** | 3.13 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Test Framework** | Playwright + pytest |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Test Report** | [Download Artifact](${{ steps.upload_report.outputs.artifact-url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📋 Test Execution Details" >> $GITHUB_STEP_SUMMARY
+          echo "| Attempt | Status | Notes |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Test Run 1** | ${{ steps.test1.outcome == 'success' && '✅ Passed' || '❌ Failed' }} | Initial test execution |" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ steps.test1.outcome }}" == "failure" ]]; then
+            echo "| **Test Run 2** | ${{ steps.test2.outcome == 'success' && '✅ Passed' || steps.test2.outcome == 'failure' && '❌ Failed' || '⏸️ Skipped' }} | Retry after 30s delay |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ "${{ steps.test2.outcome }}" == "failure" ]]; then
+            echo "| **Test Run 3** | ${{ steps.test3.outcome == 'success' && '✅ Passed' || steps.test3.outcome == 'failure' && '❌ Failed' || '⏸️ Skipped' }} | Final retry after 60s delay |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "$OVERALL_SUCCESS" == "true" ]]; then
+            echo "### ✅ Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "- End-to-end tests completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "- Application is functioning as expected" >> $GITHUB_STEP_SUMMARY
+            echo "- All critical user flows validated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "- All test attempts failed" >> $GITHUB_STEP_SUMMARY
+            echo "- Application may have functional issues" >> $GITHUB_STEP_SUMMARY
+            echo "- Review test report for detailed failure information" >> $GITHUB_STEP_SUMMARY
+          fi
