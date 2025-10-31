@@ -132,9 +132,6 @@ jobs:
           fi
           
           echo "| **Target URL** | [${{ env.url }}](${{ env.url }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Accelerator** | ${{ env.accelerator_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Python Version** | 3.13 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Test Framework** | Playwright + pytest |" >> $GITHUB_STEP_SUMMARY
           echo "| **Test Report** | [Download Artifact](${{ steps.upload_report.outputs.artifact-url }}) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -157,10 +154,8 @@ jobs:
             echo "### ✅ Test Results" >> $GITHUB_STEP_SUMMARY
             echo "- End-to-end tests completed successfully" >> $GITHUB_STEP_SUMMARY
             echo "- Application is functioning as expected" >> $GITHUB_STEP_SUMMARY
-            echo "- All critical user flows validated" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Test Results" >> $GITHUB_STEP_SUMMARY
             echo "- All test attempts failed" >> $GITHUB_STEP_SUMMARY
-            echo "- Application may have functional issues" >> $GITHUB_STEP_SUMMARY
             echo "- Review test report for detailed failure information" >> $GITHUB_STEP_SUMMARY
           fi

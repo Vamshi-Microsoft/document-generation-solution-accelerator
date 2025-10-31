@@ -120,6 +120,8 @@ jobs:
       - name: Build and Push Docker Image
         id: build_push_image
         uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_SUMMARY: false
         with:
           context: ./src
           file: ./src/WebApp.Dockerfile
@@ -137,15 +139,16 @@ jobs:
       - name: Generate Docker Build Summary
         if: always()
         run: |
+          # Extract ACR name from the secret
+          ACR_NAME=$(echo "${{ secrets.ACR_TEST_LOGIN_SERVER }}" | cut -d'.' -f1)
           echo "## 🐳 Docker Build Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Job Status** | ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Image Tag** | \`${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Registry** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Full Image Path** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Run Number** | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${ACR_NAME}.azurecr.io\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Full Image Path** | \`${ACR_NAME}.azurecr.io/webapp:${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Trigger** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | ${{ env.BRANCH_NAME }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -153,7 +156,6 @@ jobs:
             echo "### ✅ Build Details" >> $GITHUB_STEP_SUMMARY
             echo "- Docker image successfully built and pushed to ACR" >> $GITHUB_STEP_SUMMARY
             echo "- Generated unique tag: \`${{ steps.generate_docker_tag.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- Available for deployment in subsequent jobs" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
             echo "- Docker build process encountered an error" >> $GITHUB_STEP_SUMMARY
@@ -786,11 +788,10 @@ jobs:
           if [[ "${{ job.status }}" == "success" ]]; then
             echo "### ✅ Cleanup Details" >> $GITHUB_STEP_SUMMARY
             echo "- Successfully deleted Azure resource group: \`${{ env.RESOURCE_GROUP_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- Cleaned up AZD environment: \`${{ env.ENV_NAME }}\`" >> $GITHUB_STEP_SUMMARY
             if [[ "${{ env.IMAGE_TAG }}" != "latest_waf" && "${{ env.IMAGE_TAG }}" != "dev" && "${{ env.IMAGE_TAG }}" != "demo" ]]; then
               echo "- Removed custom Docker images from ACR with tag: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
             else
-              echo "- Preserved standard Docker images (using branch tag: \`${{ env.IMAGE_TAG }}\`)" >> $GITHUB_STEP_SUMMARY
+              echo "- Preserved standard Docker image (using branch tag: \`${{ env.IMAGE_TAG }}\`)" >> $GITHUB_STEP_SUMMARY
             fi
             echo "- All deployed resources have been successfully cleaned up" >> $GITHUB_STEP_SUMMARY
           else
