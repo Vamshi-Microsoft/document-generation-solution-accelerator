@@ -1,4 +1,4 @@
-name: Deploy-Test-Cleanup (Parameterized)
+name: Deploy-Test-Cleanup-v2
 on:
   pull_request:
     branches:
@@ -13,53 +13,8 @@ on:
       - demo
   workflow_dispatch:
     inputs:
-      resource_group_name:
-        description: 'Resource Group name (optional)'
-        required: false
-        default: ''
-        type: string
-      run_e2e_tests:
-        description: 'Run End-to-End tests'
-        required: false
-        default: true
-        type: boolean
-      cleanup_resources:
-        description: 'Cleanup deployed resources'
-        required: false
-        default: false
-        type: boolean
-      waf_enabled:
-        description: 'Enable WAF'
-        required: false
-        default: false
-        type: boolean
-      EXP:
-        description: 'Enable EXP'
-        required: false
-        default: false
-        type: boolean
-      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
-        description: 'Log Analytics Workspace ID (optional)'
-        required: false
-        default: ''
-        type: string
-      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
-        description: 'AI Project Resource ID (optional)'
-        required: false
-        default: ''
-        type: string
-      existing_webapp_url:
-        description: 'Existing WebApp URL (Skips deployment)'
-        required: false
-        default: ''
-        type: string
-      build_docker_image:
-        description: 'Build and push Docker image'
-        required: false
-        default: false
-        type: boolean
       azure_location:
-        description: 'Azure Location for deployment'
+        description: 'Azure Location For Deployment'
         required: false
         default: 'australiaeast'
         type: choice
@@ -73,7 +28,54 @@ on:
           - 'southeastasia'
           - 'uksouth'
           - 'eastus'
+      resource_group_name:
+        description: 'Resource Group Name (Optional)'
+        required: false
+        default: ''
+        type: string
+
+      waf_enabled:
+        description: 'Enable WAF'
+        required: false
+        default: false
+        type: boolean
+      EXP:
+        description: 'Enable EXP'
+        required: false
+        default: false
+        type: boolean
+      build_docker_image:
+        description: 'Build And Push Docker Image (Optional)'
+        required: false
+        default: false
+        type: boolean
+      run_e2e_tests:
+        description: 'Run End-to-End Tests'
+        required: false
+        default: true
+        type: boolean
+      cleanup_resources:
+        description: 'Cleanup Deployed Resources'
+        required: false
+        default: false
+        type: boolean
       
+      AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID:
+        description: 'Log Analytics Workspace ID (Optional)'
+        required: false
+        default: ''
+        type: string
+      AZURE_EXISTING_AI_PROJECT_RESOURCE_ID:
+        description: 'AI Project Resource ID (Optional)'
+        required: false
+        default: ''
+        type: string
+      existing_webapp_url:
+        description: 'Existing WebApp URL (Skips Deployment)'
+        required: false
+        default: ''
+        type: string
+        
   schedule:
     - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
 env:
