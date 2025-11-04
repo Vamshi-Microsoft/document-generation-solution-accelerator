@@ -75,7 +75,7 @@ on:
         required: false
         default: ''
         type: string
-        
+
   schedule:
     - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
 env:
@@ -91,6 +91,159 @@ env:
   BUILD_DOCKER_IMAGE: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build_docker_image || false) || false }}
 
 jobs:
+  workflow-config:
+    # ============================================================================
+    # WORKFLOW CONFIGURATION JOB
+    # ============================================================================
+    # Purpose: Display workflow configuration summary immediately after submission
+    # Always runs first to provide immediate feedback to users about their settings
+    # ============================================================================
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initialize pipeline
+        run: |
+          echo "🚀 ==================================="
+          echo "📋 WORKFLOW CONFIGURATION SUMMARY"
+          echo "🚀 ==================================="
+          echo "Trigger Type: ${{ github.event_name }}"
+          echo "Branch: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}"
+          echo ""
+          echo "Configuration Settings:"
+          echo "  • WAF Enabled: ${{ env.WAF_ENABLED }}"
+          echo "  • EXP Enabled: ${{ env.EXP }}"
+          echo "  • Run E2E Tests: ${{ env.RUN_E2E_TESTS }}"
+          echo "  • Cleanup Resources: ${{ env.CLEANUP_RESOURCES }}"
+          echo "  • Build Docker Image: ${{ env.BUILD_DOCKER_IMAGE }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.azure_location }}" ]]; then
+            echo "  • Selected Azure Location: ${{ github.event.inputs.azure_location }}"
+          else
+            echo "  • Azure Location: Will be determined by quota check"
+          fi
+          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
+            echo "  • Using Existing Webapp URL: ${{ github.event.inputs.existing_webapp_url }}"
+            echo "  • Skip Deployment: Yes"
+          else
+            echo "  • Skip Deployment: No"
+          fi
+          echo ""
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
+          else
+            echo "ℹ️  Manual Trigger: Using user-specified configuration"
+          fi
+          echo "🚀 ==================================="
+          
+          # Create GitHub Summary for immediate visibility
+          echo "# 🚀 Workflow Configuration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Configuration Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger Type** | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **WAF Enabled** | ${{ env.WAF_ENABLED == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **EXP Enabled** | ${{ env.EXP == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run E2E Tests** | ${{ env.RUN_E2E_TESTS == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Cleanup Resources** | ${{ env.CLEANUP_RESOURCES == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Docker Image** | ${{ env.BUILD_DOCKER_IMAGE == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # Add Azure location info
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.azure_location }}" ]]; then
+            echo "| **Azure Location** | \`${{ github.event.inputs.azure_location }}\` (User Selected) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Azure Location** | 🔍 Will be determined by quota check |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Add existing webapp URL info if provided
+          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
+            echo "| **Existing WebApp URL** | [${{ github.event.inputs.existing_webapp_url }}](${{ github.event.inputs.existing_webapp_url }}) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Skip New Deployment** | ✅ Yes |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Skip New Deployment** | ❌ No |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Add Resource Group info if provided
+          if [[ -n "${{ github.event.inputs.resource_group_name }}" ]]; then
+            echo "| **Resource Group** | \`${{ github.event.inputs.resource_group_name }}\` (User Provided) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Resource Group** | 🔄 Will be auto-generated |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Add configuration notes
+          echo "## 📝 Configuration Notes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "- 🤖 **Automatic Trigger**: Using Non-WAF + Non-EXP configuration for safety" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔒 **Security**: Automatic triggers use conservative settings" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 👤 **Manual Trigger**: Using user-specified configuration" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Add EXP parameter details if provided
+          if [[ "${{ env.EXP }}" == "true" || -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" || -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔧 EXP Parameters" >> $GITHUB_STEP_SUMMARY
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]]; then
+              echo "- **Log Analytics Workspace ID**: \`${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}\`" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              echo "- **AI Project Resource ID**: \`${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}\`" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [[ "${{ env.EXP }}" == "false" && (-n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" || -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}") ]]; then
+              echo "- ⚠️ **Note**: EXP parameters provided but EXP is disabled. These may trigger auto-enablement." >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          
+          # Add job execution plan
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎯 Execution Plan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Jobs that will execute based on current configuration:**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Docker Build Job
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.build_docker_image }}" == "true" ]]; then
+            echo "- ✅ **Docker Build**: Will build and push new Docker image" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Docker Build**: Will be skipped (using existing image)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Deploy Job
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ github.event.inputs.existing_webapp_url }}" == "" ]]; then
+            echo "- ✅ **Deploy**: Will deploy infrastructure and application" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ **Deploy**: Will be skipped (using existing webapp)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # E2E Test Job
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ github.event.inputs.run_e2e_tests }}" != "false" ]]; then
+            if [[ -n "${{ github.event.inputs.existing_webapp_url }}" ]]; then
+              echo "- ✅ **E2E Tests**: Will test existing webapp URL" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ✅ **E2E Tests**: Will test deployed application" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- ❌ **E2E Tests**: Will be skipped (disabled by user)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Cleanup Job
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ github.event.inputs.cleanup_resources }}" != "false" ]]; then
+            if [[ "${{ github.event.inputs.existing_webapp_url }}" == "" ]]; then
+              echo "- ✅ **Cleanup**: Will delete resources after testing" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ❌ **Cleanup**: Will be skipped (no new resources to clean)" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- ❌ **Cleanup**: Will be skipped (disabled by user)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*⏱️ Jobs will start executing shortly. Monitor individual job progress below.*" >> $GITHUB_STEP_SUMMARY
+
   docker-build:
     # ============================================================================
     # DOCKER BUILD JOB SCENARIOS
@@ -199,10 +352,10 @@ jobs:
     # | Manual          | Empty/None      | ✅ RUN   | Fresh deployment       |
     # | Manual          | Provided URL    | ❌ SKIP  | Test existing only     |
     #
-    # Dependencies: Waits for docker-build (uses always() if build skips)
+    # Dependencies: Waits for workflow-config and docker-build (uses always() if build skips)
     # ============================================================================
     if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs.existing_webapp_url == '' || github.event.inputs.existing_webapp_url == null)
-    needs: [docker-build]
+    needs: [workflow-config, docker-build]
     runs-on: ubuntu-latest
     outputs:
       RESOURCE_GROUP_NAME: ${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}
@@ -218,43 +371,6 @@ jobs:
       CLEANUP_RESOURCES: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.cleanup_resources || true) || true }}
       
     steps:
-      - name: Display Workflow Configuration
-        run: |
-          echo "🚀 ==================================="
-          echo "📋 WORKFLOW CONFIGURATION SUMMARY"
-          echo "🚀 ==================================="
-          echo "Trigger Type: ${{ github.event_name }}"
-          echo "Branch: ${{ env.BRANCH_NAME }}"
-          echo ""
-          echo "Configuration Settings:"
-          echo "  • WAF Enabled: ${{ env.WAF_ENABLED }}"
-          echo "  • EXP Enabled: ${{ env.EXP }}"
-          echo "  • Run E2E Tests: ${{ env.RUN_E2E_TESTS }}"
-          echo "  • Cleanup Resources: ${{ env.CLEANUP_RESOURCES }}"
-          echo "  • Build Docker Image: ${{ env.BUILD_DOCKER_IMAGE }}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.azure_location }}" ]]; then
-            echo "  • Selected Azure Location: ${{ github.event.inputs.azure_location }}"
-          else
-            echo "  • Azure Location: Will be determined by quota check"
-          fi
-          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
-            echo "  • Using Existing Webapp URL: ${{ github.event.inputs.existing_webapp_url }}"
-            echo "  • Skip Deployment: Yes"
-          else
-            echo "  • Skip Deployment: No"
-          fi
-          echo ""
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-            echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
-          else
-            echo "ℹ️  Manual Trigger: Using user-specified configuration"
-            # Check if EXP was auto-enabled after user input validation
-            if [[ "${{ env.EXP }}" == "true" && "${{ github.event.inputs.EXP }}" != "true" ]]; then
-              echo "🔧 Note: EXP was automatically enabled due to provided parameter values"
-            fi
-          fi
-          echo "🚀 ==================================="
-
       - name: Validate and Auto-Configure EXP
         run: |
           echo "🔍 Validating EXP configuration..."
@@ -677,7 +793,7 @@ jobs:
     # URL Priority: existing_webapp_url || deployed WEBAPP_URL
     # ============================================================================
     if: always() && ((needs.deploy.result == 'success' && needs.deploy.outputs.WEBAPP_URL != '') || (github.event.inputs.existing_webapp_url != '' && github.event.inputs.existing_webapp_url != null)) && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
-    needs: [docker-build, deploy]
+    needs: [workflow-config, docker-build, deploy]
     uses: ./.github/workflows/test-automation.yml
     with:
       DOCGEN_URL: ${{ github.event.inputs.existing_webapp_url || needs.deploy.outputs.WEBAPP_URL }}
@@ -698,10 +814,10 @@ jobs:
     # | Success       | None           | Any          | Any              | ❌ SKIP  | No resources     |
     #
     # Actions: Deletes resource group + custom Docker images (preserves standard tags)
-    # Dependencies: Waits for all jobs (docker-build, deploy, e2e-test)
+    # Dependencies: Waits for all jobs (workflow-config, docker-build, deploy, e2e-test)
     # ============================================================================
     if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.RESOURCE_GROUP_NAME != '' && github.event.inputs.existing_webapp_url == '' && (github.event_name != 'workflow_dispatch' || github.event.inputs.cleanup_resources == 'true' || github.event.inputs.cleanup_resources == null)
-    needs: [docker-build, deploy, e2e-test]
+    needs: [workflow-config, docker-build, deploy, e2e-test]
     runs-on: ubuntu-latest
     env:
       RESOURCE_GROUP_NAME: ${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}
