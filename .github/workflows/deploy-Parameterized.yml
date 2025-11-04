@@ -218,62 +218,6 @@ jobs:
       CLEANUP_RESOURCES: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.cleanup_resources || true) || true }}
       
     steps:
-      - name: Display Workflow Configuration
-        run: |
-          echo "🚀 ==================================="
-          echo "📋 WORKFLOW CONFIGURATION SUMMARY"
-          echo "🚀 ==================================="
-          echo "Trigger Type: ${{ github.event_name }}"
-          echo "Branch: ${{ env.BRANCH_NAME }}"
-          echo ""
-          echo "Configuration Settings:"
-          echo "  • WAF Enabled: ${{ env.WAF_ENABLED }}"
-          echo "  • EXP Enabled: ${{ env.EXP }}"
-          echo "  • Run E2E Tests: ${{ env.RUN_E2E_TESTS }}"
-          echo "  • Cleanup Resources: ${{ env.CLEANUP_RESOURCES }}"
-          echo "  • Build Docker Image: ${{ env.BUILD_DOCKER_IMAGE }}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.azure_location }}" ]]; then
-            echo "  • Selected Azure Location: ${{ github.event.inputs.azure_location }}"
-          else
-            echo "  • Azure Location: Will be determined by quota check"
-          fi
-          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
-            echo "  • Using Existing Webapp URL: ${{ github.event.inputs.existing_webapp_url }}"
-            echo "  • Skip Deployment: Yes"
-          else
-            echo "  • Skip Deployment: No"
-          fi
-          echo ""
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-            echo "ℹ️  Automatic Trigger: Using Non-WAF + Non-EXP configuration"
-          else
-            echo "ℹ️  Manual Trigger: Using user-specified configuration"
-            # Check if EXP was auto-enabled after user input validation
-            if [[ "${{ env.EXP }}" == "true" && "${{ github.event.inputs.EXP }}" != "true" ]]; then
-              echo "🔧 Note: EXP was automatically enabled due to provided parameter values"
-            fi
-          fi
-          echo "🚀 ==================================="
-
-      - name: Validate and Auto-Configure EXP
-        run: |
-          echo "🔍 Validating EXP configuration..."
-          
-          # Check if EXP values were provided but EXP is disabled
-          if [[ "${{ github.event.inputs.EXP }}" != "true" ]]; then
-            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
-              echo "🔧 AUTO-ENABLING EXP: EXP parameter values were provided but EXP was not explicitly enabled."
-              echo ""
-              echo "You provided values for:"
-              [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] && echo "  - Azure Log Analytics Workspace ID: '${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}'"
-              [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]] && echo "  - Azure AI Project Resource ID: '${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}'"
-              echo ""
-              echo "✅ Automatically enabling EXP to use these values."
-              echo "EXP=true" >> $GITHUB_ENV
-              echo "📌 EXP has been automatically enabled for this deployment."
-            fi
-          fi
-          
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -461,14 +405,125 @@ jobs:
               git checkout HEAD -- infra/main.parameters.json || echo "Using existing main.parameters.json"
             fi
           fi
-
-      - name: Display Docker Image Tag
+      - name: Validate and Auto-Configure EXP
         run: |
-          echo "=== Docker Image Information ==="
-          echo "Docker Image Tag: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
-          echo "Registry: ${{ secrets.ACR_TEST_LOGIN_SERVER }}"
-          echo "Full Image: ${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
-          echo "================================"
+          echo "🔍 Validating EXP configuration..."
+          
+          # Check if EXP values were provided but EXP is disabled
+          if [[ "${{ github.event.inputs.EXP }}" != "true" ]]; then
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              echo "🔧 AUTO-ENABLING EXP: EXP parameter values were provided but EXP was not explicitly enabled."
+              echo ""
+              echo "You provided values for:"
+              [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] && echo "  - Azure Log Analytics Workspace ID: '${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}'"
+              [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]] && echo "  - Azure AI Project Resource ID: '${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}'"
+              echo ""
+              echo "✅ Automatically enabling EXP to use these values."
+              echo "EXP=true" >> $GITHUB_ENV
+              echo "📌 EXP has been automatically enabled for this deployment."
+            fi
+          fi
+
+      - name: Generate Pre-Deployment Summary
+        run: |
+          
+          # Configuration Table
+          echo "### 📋 Workflow Configuration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Configuration | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger Type** | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ env.BRANCH_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **WAF Enabled** | ${{ env.WAF_ENABLED == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **EXP Enabled** | ${{ env.EXP == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run E2E Tests** | ${{ env.RUN_E2E_TESTS == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Cleanup Resources** | ${{ env.CLEANUP_RESOURCES == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Docker Image** | ${{ env.BUILD_DOCKER_IMAGE == 'true' && '✅ Yes' || '❌ No' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # Azure Location
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.azure_location }}" ]]; then
+            echo "| **Azure Location** | ${{ github.event.inputs.azure_location }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Azure Location** | ${{ steps.set_region.outputs.AZURE_LOCATION }} (from quota check) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # OpenAI Location
+          echo "| **Azure OpenAI Location** | ${{ steps.set_region.outputs.AZURE_ENV_OPENAI_LOCATION }} |" >> $GITHUB_STEP_SUMMARY
+          
+          # Existing webapp URL check
+          if [[ "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
+            echo "| **Existing Webapp URL** | ${{ github.event.inputs.existing_webapp_url }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Skip Deployment** | ✅ Yes |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Skip Deployment** | ❌ No |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Deployment Details Table
+          echo "### 🔧 Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Resource Group** | \`${{ env.RESOURCE_GROUP_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment Name** | \`${{ steps.generate_env_name.outputs.ENV_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Solution Prefix** | \`${{ env.SOLUTION_PREFIX }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Configuration Type** | ${{ env.WAF_ENABLED == 'true' && 'WAF' || 'Non-WAF' }}+${{ env.EXP == 'true' && 'EXP' || 'Non-EXP' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Docker Image Details
+          echo "### 🐳 Docker Image Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ steps.determine_image_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Full Image Path** | \`${{ secrets.ACR_TEST_LOGIN_SERVER }}/webapp:${{ steps.determine_image_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+          
+          # Docker build status
+          if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
+            if [[ "${{ needs.docker-build.result }}" == "success" ]]; then
+              echo "| **Image Source** | ✅ Newly built (this run) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| **Image Source** | ❌ Build failed |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| **Image Source** | 📦 Existing (branch-based) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| **Docker Image Tag** | \`${{ steps.determine_image_tag.outputs.IMAGE_TAG }}\` |" >> $GITHUB_STEP_SUMMARY
+
+          
+          # Configuration Notes
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "### ℹ️ Automatic Trigger Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "Using Non-WAF + Non-EXP configuration for automatic triggers (PR, schedule, workflow_run)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ Manual Trigger Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "Using user-specified configuration for manual dispatch" >> $GITHUB_STEP_SUMMARY
+            if [[ "${{ env.EXP }}" == "true" && "${{ github.event.inputs.EXP }}" != "true" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "🔧 **Note**: EXP was automatically enabled due to provided parameter values" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          
+          # EXP Details if enabled
+          if [[ "${{ env.EXP }}" == "true" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🧪 EXP Configuration Details" >> $GITHUB_STEP_SUMMARY
+            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]]; then
+              echo "- **Log Analytics Workspace ID**: \`${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **Log Analytics Workspace ID**: Using default from secrets" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
+              echo "- **AI Project Resource ID**: \`${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **AI Project Resource ID**: Using default from secrets" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
 
       - name: Deploy using azd up and extract values (${{ github.event.inputs.waf_enabled == 'true' && 'WAF' || 'Non-WAF' }}+${{ (github.event.inputs.EXP == 'true' || github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID != '' || github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID != '') && 'EXP' || 'Non-EXP' }})
         id: get_output
@@ -530,11 +585,6 @@ jobs:
             echo "AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: $EXP_AI_PROJECT_ID"
             azd env set AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID="$EXP_LOG_ANALYTICS_ID"
             azd env set AZURE_EXISTING_AI_PROJECT_RESOURCE_ID="$EXP_AI_PROJECT_ID"
-          else
-            echo "❌ EXP DISABLED - Skipping EXP parameters"
-            if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]] || [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
-              echo "⚠️  Warning: EXP parameter values provided but EXP is disabled. These values will be ignored."
-            fi
           fi
 
           # Deploy using azd up
