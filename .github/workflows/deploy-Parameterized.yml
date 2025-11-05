@@ -786,7 +786,7 @@ jobs:
             echo "- Manual cleanup may be required" >> $GITHUB_STEP_SUMMARY
           fi
 
-  send-notifications:
+  send-notification:
     # ============================================================================
     # NOTIFICATION JOB
     # ============================================================================
@@ -798,7 +798,7 @@ jobs:
     # 4. Test failure notifications (when deploy succeeds but e2e tests fail)
     # ============================================================================
     if: always()
-    needs: [docker-build, deploy, e2e-test, cleanup-deployment]
+    needs: [docker-build, deploy, e2e-test]
     runs-on: ubuntu-latest
     steps:
       - name: Send Quota Failure Notification
@@ -807,8 +807,8 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment has failed due to insufficient Azure quota in the requested regions.</p><p><strong>Issue Details:</strong><br>• Quota check failed for GPT and Text Embedding models<br>• Required GPT Capacity: ${{ env.GPT_MIN_CAPACITY }}<br>• Required Text Embedding Capacity: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}<br>• Checked Regions: ${{ vars.AZURE_REGIONS }}</p><p><strong>Action Required:</strong><br>• Increase quota limits in Azure portal<br>• Or select a different region with available quota</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please resolve the quota issue and retry the deployment.</p><p>Best regards,<br>Your Automation Team</p>",
-            "subject": "DocGen Pipeline - Quota Check Failed"
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment has failed due to insufficient quota in the requested regions.</p><p><strong>Issue Details:</strong><br>• Quota check failed for GPT and Text Embedding models<br>• Required GPT Capacity: ${{ env.GPT_MIN_CAPACITY }}<br>• Required Text Embedding Capacity: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}<br>• Checked Regions: ${{ vars.AZURE_REGIONS }}</p><p><strong>Action Required:</strong><br>• Increase quota limits in Azure portal<br>• Or select a different region with available quota</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please resolve the quota issue and retry the deployment.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Failed (Insufficient Quota)"
           }
           EOF
           )
