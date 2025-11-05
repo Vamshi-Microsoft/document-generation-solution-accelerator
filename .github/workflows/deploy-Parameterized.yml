@@ -1,4 +1,4 @@
-name: Deploy-Test-Cleanup-v2
+name: Deploy-Test-Cleanup (v2)
 on:
   pull_request:
     branches:
@@ -211,6 +211,7 @@ jobs:
       AZURE_LOCATION: ${{ steps.set_region.outputs.AZURE_LOCATION }}
       AZURE_ENV_OPENAI_LOCATION: ${{ steps.set_region.outputs.AZURE_ENV_OPENAI_LOCATION }}
       IMAGE_TAG: ${{ steps.determine_image_tag.outputs.IMAGE_TAG }}
+      QUOTA_FAILED: ${{ steps.quota_failure_output.outputs.QUOTA_FAILED }}
     env:
       # For automatic triggers: force Non-WAF + Non-EXP, for manual dispatch: use inputs
       WAF_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.waf_enabled || false) || false }}
@@ -303,21 +304,15 @@ jobs:
           fi
 
 
-      - name: Send Notification on Quota Failure
+
+
+      - name: Set Quota Failure Output
+        id: quota_failure_output
         if: env.QUOTA_FAILED == 'true'
         run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          EMAIL_BODY=$(cat <<EOF
-          {
-            "body": "<p>Dear Team,</p><p>The quota check has failed, and the pipeline cannot proceed.</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please take necessary action.</p><p>Best regards,<br>Your Automation Team</p>"
-          }
-          EOF
-          )
-
-          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "$EMAIL_BODY" || echo "Failed to send notification"
-
+          echo "QUOTA_FAILED=true" >> $GITHUB_OUTPUT
+          echo "Quota check failed - will notify via separate notification job"
+      
       - name: Fail Pipeline if Quota Check Fails
         if: env.QUOTA_FAILED == 'true'
         run: exit 1
@@ -596,37 +591,7 @@ jobs:
           az logout
           echo "Logged out from Azure."
 
-      - name: Send Notification
-        if: always()
-        run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          WEBAPP_URL="${{ steps.get_output.outputs.WEBAPP_URL }}"
-          RESOURCE_GROUP="${{ steps.check_create_rg.outputs.RESOURCE_GROUP_NAME }}"
-          IMAGE_TAG="${{ steps.determine_image_tag.outputs.IMAGE_TAG }}"
-          IS_SUCCESS=${{ job.status == 'success' }}
-          
-          # Construct the email body based on deployment result
-          if [ "$IS_SUCCESS" = "true" ]; then
-            EMAIL_BODY=$(cat <<EOF
-            {
-              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a></p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
-              "subject": "DocGen Deployment - Success"
-            }
-          EOF
-            )
-          else
-            EMAIL_BODY=$(cat <<EOF
-            {
-              "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}</p><p><strong>Run URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the matter at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
-              "subject": "DocGen Deployment - Failure"
-            }
-          EOF
-            )
-          fi
-          # Send the notification
-          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "$EMAIL_BODY" || echo "Failed to send notification"
+
 
       - name: Generate Deploy Job Summary
         if: always()
@@ -781,28 +746,7 @@ jobs:
           azd down --purge --force --no-prompt
           echo "Deployment deleted successfully."
 
-      - name: Send Notification on Failure
-        if: always() && (failure() || needs.deploy.result == 'failure')
-        run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          # Get deployment configuration for notification
-          WAF_STATUS="${{ github.event.inputs.waf_enabled || true }}"
-          EXP_STATUS="${{ env.EXP || false }}"
-          CLEANUP_STATUS="${{ github.event.inputs.cleanup_resources || true }}"
 
-          # Construct the email body
-          EMAIL_BODY=$(cat <<EOF
-          {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the document-generation-solution-accelerator Unified Deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Configuration:</strong><br>- WAF Enabled: ${WAF_STATUS}<br>- EXP: ${EXP_STATUS}<br>- Cleanup: ${CLEANUP_STATUS}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the matter at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>"
-          }
-          EOF
-          )
-
-          # Send the notification
-          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
-            -H "Content-Type: application/json" \
-            -d "$EMAIL_BODY" || echo "Failed to send notification"
 
       - name: Logout from Azure
         if: always()
@@ -841,3 +785,159 @@ jobs:
             echo "- Some resources may still exist in Azure" >> $GITHUB_STEP_SUMMARY
             echo "- Manual cleanup may be required" >> $GITHUB_STEP_SUMMARY
           fi
+
+  send-notification:
+    # ============================================================================
+    # NOTIFICATION JOB
+    # ============================================================================
+    # Condition: Always runs to send appropriate notifications based on job results
+    # Sends notifications for:
+    # 1. Quota check failures (when deploy job fails due to quota issues)
+    # 2. Deployment failures (when deploy job fails for other reasons)
+    # 3. Success notifications (when deploy succeeds and e2e tests succeed)
+    # 4. Test failure notifications (when deploy succeeds but e2e tests fail)
+    # ============================================================================
+    if: always()
+    needs: [docker-build, deploy, e2e-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Quota Failure Notification
+        if: needs.deploy.result == 'failure' && needs.deploy.outputs.QUOTA_FAILED == 'true'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment has failed due to insufficient quota in the requested regions.</p><p><strong>Issue Details:</strong><br>• Quota check failed for GPT and Text Embedding models<br>• Required GPT Capacity: ${{ env.GPT_MIN_CAPACITY }}<br>• Required Text Embedding Capacity: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}<br>• Checked Regions: ${{ vars.AZURE_REGIONS }}</p><p><strong>Action Required:</strong><br>• Increase quota limits in Azure portal<br>• Or select a different region with available quota</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please resolve the quota issue and retry the deployment.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Failed (Insufficient Quota)"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Quota Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "====================================================="
+
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send quota failure notification"
+
+      - name: Send Deployment Failure Notification
+        if: needs.deploy.result == 'failure' && needs.deploy.outputs.QUOTA_FAILED != 'true'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RESOURCE_GROUP="${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}"
+          
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the deployment failure at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Deployment - Failed"
+          }
+          EOF
+          )
+          echo "===== DEBUG: Deployment Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "=========================================================="
+          
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send deployment failure notification"
+
+      - name: Send Success Notification
+        if: needs.deploy.result == 'success' && (needs.e2e-test.result == 'skipped' || needs.e2e-test.outputs.TEST_SUCCESS == 'true')
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          WEBAPP_URL="${{ needs.deploy.outputs.WEBAPP_URL || github.event.inputs.existing_webapp_url }}"
+          RESOURCE_GROUP="${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          
+          # Determine test status message
+          if [ "${{ needs.e2e-test.result }}" = "skipped" ]; then
+            TEST_STATUS_MSG="• E2E Tests: Skipped (as configured)"
+          else
+            TEST_STATUS_MSG="• E2E Tests: Passed<br>• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a>"
+          fi
+          
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment and testing process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a><br>${TEST_STATUS_MSG}</p><p><strong>Configuration:</strong><br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Success"
+          }
+          EOF
+          )
+          echo "===== DEBUG: Success EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==============================================="
+          
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send success notification"
+
+      - name: Send Test Failure Notification
+        if: needs.deploy.result == 'success' && needs.e2e-test.result != 'skipped' && needs.e2e-test.outputs.TEST_SUCCESS != 'true'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          WEBAPP_URL="${{ needs.deploy.outputs.WEBAPP_URL || github.event.inputs.existing_webapp_url }}"
+          RESOURCE_GROUP="${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}"
+          
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>We would like to inform you that while the DocGen deployment was successful, the E2E test automation process has encountered issues and failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a><br>• Deployment Status: ✅ Success<br>• E2E Tests: ❌ Failed</p><p><strong>Test Details:</strong><br>• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a></p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application has been deployed successfully, but please investigate the test failures to ensure functionality.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Deployment Success, Tests Failed"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Test Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "===================================================="
+
+          curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send test failure notification"
+
+      - name: Send Existing URL Success Notification
+        # Scenario: Deployment skipped (existing URL provided) AND e2e tests passed
+        if: needs.deploy.result == 'skipped' && github.event.inputs.existing_webapp_url != '' && needs.e2e-test.result == 'success' && (needs.e2e-test.outputs.TEST_SUCCESS == 'true' || needs.e2e-test.outputs.TEST_SUCCESS == '')
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING_URL="${{ github.event.inputs.existing_webapp_url }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline executed against the <strong>existing WebApp URL</strong> you supplied and the E2E tests completed successfully.</p><p><strong>Test Results:</strong><br>• Status: ✅ Passed<br>${TEST_REPORT_URL:+• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a>}<br>• Target URL: <a href=\"${EXISTING_URL}\">${EXISTING_URL}</a></p><p><strong>Deployment:</strong> Skipped (existing URL reuse)</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>No infrastructure changes were made.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Existing URL Tests Passed"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Existing URL Success EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==========================================================="
+
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send existing URL success notification"
+
+      - name: Send Existing URL Test Failure Notification
+        # Scenario: Deployment skipped (existing URL provided) AND e2e tests failed
+        if: needs.deploy.result == 'skipped' && github.event.inputs.existing_webapp_url != '' && needs.e2e-test.result == 'failure'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING_URL="${{ github.event.inputs.existing_webapp_url }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline targeted the <strong>existing WebApp URL</strong> you supplied. Deployment was intentionally skipped, but the E2E tests have <strong>failed</strong>.</p><p><strong>Failure Details:</strong><br>• Target URL: <a href=\"${EXISTING_URL}\">${EXISTING_URL}</a><br>${TEST_REPORT_URL:+• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a>}<br>• Deployment: Skipped (existing URL reuse)</p><p><strong>Recommended Actions:</strong><br>• Inspect the failing test cases<br>• Verify application availability and recent changes<br>• Re-run tests after fixes</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Existing URL Tests Failed"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Existing URL Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==========================================================="
+
+          curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send existing URL test failure notification"
