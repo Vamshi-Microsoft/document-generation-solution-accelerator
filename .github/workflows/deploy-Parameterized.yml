@@ -822,11 +822,10 @@ jobs:
         run: |
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           RESOURCE_GROUP="${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}"
-          IMAGE_TAG="${{ needs.deploy.outputs.IMAGE_TAG }}"
           
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Docker Image Tag: ${IMAGE_TAG}<br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}<br>• Branch: ${{ env.BRANCH_NAME }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the deployment failure at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Please investigate the deployment failure at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Deployment - Failed"
           }
           EOF
@@ -842,7 +841,6 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           WEBAPP_URL="${{ needs.deploy.outputs.WEBAPP_URL || github.event.inputs.existing_webapp_url }}"
           RESOURCE_GROUP="${{ needs.deploy.outputs.RESOURCE_GROUP_NAME }}"
-          IMAGE_TAG="${{ needs.deploy.outputs.IMAGE_TAG }}"
           TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
           
           # Determine test status message
@@ -854,7 +852,7 @@ jobs:
           
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment and testing process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a><br>• Docker Image Tag: ${IMAGE_TAG}<br>${TEST_STATUS_MSG}</p><p><strong>Configuration:</strong><br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}<br>• Branch: ${{ env.BRANCH_NAME }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment and testing process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href=\"${WEBAPP_URL}\">${WEBAPP_URL}</a><br>${TEST_STATUS_MSG}</p><p><strong>Configuration:</strong><br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Success"
           }
           EOF
