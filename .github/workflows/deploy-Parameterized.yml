@@ -1,4 +1,4 @@
-name: Deploy-Test-Cleanup-v2
+name: Deploy-Test-Cleanup (v2)
 on:
   pull_request:
     branches:
@@ -79,8 +79,8 @@ on:
   schedule:
     - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
 env:
-  GPT_MIN_CAPACITY: 1500
-  TEXT_EMBEDDING_MIN_CAPACITY: 800
+  GPT_MIN_CAPACITY: 150
+  TEXT_EMBEDDING_MIN_CAPACITY: 80
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   # For automatic triggers (pull_request, workflow_run, schedule): force Non-WAF + Non-EXP
   # For manual dispatch: use input values or defaults
