@@ -813,6 +813,10 @@ jobs:
           EOF
           )
 
+          echo "===== DEBUG: Quota Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "====================================================="
+
           curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send quota failure notification"
@@ -830,6 +834,9 @@ jobs:
           }
           EOF
           )
+          echo "===== DEBUG: Deployment Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "=========================================================="
           
           curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
             -H "Content-Type: application/json" \
@@ -857,6 +864,9 @@ jobs:
           }
           EOF
           )
+          echo "===== DEBUG: Success EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==============================================="
           
           curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
             -H "Content-Type: application/json" \
@@ -878,9 +888,59 @@ jobs:
           EOF
           )
 
+          echo "===== DEBUG: Test Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "===================================================="
+
           curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send test failure notification"
+
+      - name: Send Existing URL Success Notification
+        # Scenario: Deployment skipped (existing URL provided) AND e2e tests passed
+        if: needs.deploy.result == 'skipped' && github.event.inputs.existing_webapp_url != '' && needs.e2e-test.result == 'success' && (needs.e2e-test.outputs.TEST_SUCCESS == 'true' || needs.e2e-test.outputs.TEST_SUCCESS == '')
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING_URL="${{ github.event.inputs.existing_webapp_url }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline executed against the <strong>existing WebApp URL</strong> you supplied and the E2E tests completed successfully.</p><p><strong>Test Results:</strong><br>• Status: ✅ Passed<br>${TEST_REPORT_URL:+• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a>}<br>• Target URL: <a href=\"${EXISTING_URL}\">${EXISTING_URL}</a></p><p><strong>Deployment:</strong> Skipped (existing URL reuse)</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>No infrastructure changes were made.</p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Existing URL Tests Passed"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Existing URL Success EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==========================================================="
+
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send existing URL success notification"
+
+      - name: Send Existing URL Test Failure Notification
+        # Scenario: Deployment skipped (existing URL provided) AND e2e tests failed
+        if: needs.deploy.result == 'skipped' && github.event.inputs.existing_webapp_url != '' && needs.e2e-test.result == 'failure'
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING_URL="${{ github.event.inputs.existing_webapp_url }}"
+          TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
+          EMAIL_BODY=$(cat <<EOF
+          {
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline targeted the <strong>existing WebApp URL</strong> you supplied. Deployment was intentionally skipped, but the E2E tests have <strong>failed</strong>.</p><p><strong>Failure Details:</strong><br>• Target URL: <a href=\"${EXISTING_URL}\">${EXISTING_URL}</a><br>${TEST_REPORT_URL:+• Test Report: <a href=\"${TEST_REPORT_URL}\">View Report</a>}<br>• Deployment: Skipped (existing URL reuse)</p><p><strong>Recommended Actions:</strong><br>• Inspect the failing test cases<br>• Verify application availability and recent changes<br>• Re-run tests after fixes</p><p><strong>Build URL:</strong> <a href=\"${RUN_URL}\">${RUN_URL}</a></p><p>Best regards,<br>Your Automation Team</p>",
+            "subject": "DocGen Pipeline - Existing URL Tests Failed"
+          }
+          EOF
+          )
+
+          echo "===== DEBUG: Existing URL Failure EMAIL_BODY (raw JSON) ====="
+          printf '%s\n' "$EMAIL_BODY"
+          echo "==========================================================="
+
+          curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
+            -H "Content-Type: application/json" \
+            -d "$EMAIL_BODY" || echo "Failed to send existing URL test failure notification"
       
       - name: Generate Notification Job Summary
         if: always()
@@ -926,6 +986,10 @@ jobs:
           echo "- **E2E Test Job**: ${{ needs.e2e-test.result == 'success' && '✅ Success' || needs.e2e-test.result == 'failure' && '❌ Failed' || '⏸️ Skipped' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Test Results**: ${{ needs.e2e-test.outputs.TEST_SUCCESS == 'true' && '✅ Passed' || needs.e2e-test.outputs.TEST_SUCCESS == 'false' && '❌ Failed' || '⏸️ Not Run' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Quota Status**: ${{ needs.deploy.outputs.QUOTA_FAILED == 'true' && '❌ Quota Failed' || '✅ Quota OK' }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.deploy.result }}" == "skipped" && "${{ github.event.inputs.existing_webapp_url }}" != "" ]]; then
+            echo "- **Mode**: Existing URL (deployment skipped)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Target URL**: ${{ github.event.inputs.existing_webapp_url }}" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
           echo "- **Pipeline Run**: [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
