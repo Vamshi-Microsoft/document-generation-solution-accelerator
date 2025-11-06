@@ -807,7 +807,7 @@ jobs:
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment has failed due to insufficient quota in the requested regions.</p><p><strong>Issue Details:</strong><br>• Quota check failed for GPT and Text Embedding models<br>• Required GPT Capacity: ${{ env.GPT_MIN_CAPACITY }}<br>• Required Text Embedding Capacity: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}<br>• Checked Regions: ${{ vars.AZURE_REGIONS }}</p><p><strong>Action Required:</strong><br>• Increase quota limits in Azure portal<br>• Or select a different region with available quota</p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Please resolve the quota issue and retry the deployment.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment has failed due to insufficient quota in the requested regions.</p><p><strong>Issue Details:</strong><br>• Quota check failed for GPT and Text Embedding models<br>• Required GPT Capacity: ${{ env.GPT_MIN_CAPACITY }}<br>• Required Text Embedding Capacity: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}<br>• Checked Regions: ${{ vars.AZURE_REGIONS }}</p><p><strong>Action Required:</strong><br>• Increase quota limits in Azure portal<br>• Or select a different region with available quota</p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Please resolve the quota issue and retry the deployment.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Failed (Insufficient Quota)"
           }
           EOF
@@ -829,7 +829,7 @@ jobs:
           
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Please investigate the deployment failure at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment process has encountered an issue and has failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Please investigate the deployment failure at your earliest convenience.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Deployment - Failed"
           }
           EOF
@@ -859,7 +859,7 @@ jobs:
           
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment and testing process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href='${WEBAPP_URL}'>${WEBAPP_URL}</a><br>${TEST_STATUS_MSG}</p><p><strong>Configuration:</strong><br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that the DocGen deployment and testing process has completed successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href='${WEBAPP_URL}'>${WEBAPP_URL}</a><br>${TEST_STATUS_MSG}</p><p><strong>Configuration:</strong><br>• WAF Enabled: ${{ env.WAF_ENABLED }}<br>• EXP Enabled: ${{ env.EXP }}</p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>The application is now ready for use.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Success"
           }
           EOF
@@ -882,7 +882,7 @@ jobs:
           
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>We would like to inform you that while the DocGen deployment was successful, the E2E test automation process has encountered issues and failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href='${WEBAPP_URL}'>${WEBAPP_URL}</a><br>• Deployment Status: ✅ Success<br>• E2E Tests: ❌ Failed</p><p><strong>Test Details:</strong><br>• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a></p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>The application has been deployed successfully, but please investigate the test failures to ensure functionality.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>We would like to inform you that while the DocGen deployment was successful, the E2E test automation process has encountered issues and failed to complete successfully.</p><p><strong>Deployment Details:</strong><br>• Resource Group: ${RESOURCE_GROUP}<br>• Web App URL: <a href='${WEBAPP_URL}'>${WEBAPP_URL}</a><br>• Deployment Status: ✅ Success<br>• E2E Tests: ❌ Failed</p><p><strong>Test Details:</strong><br>• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a></p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>The application has been deployed successfully, but please investigate the test failures to ensure functionality.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Deployment Success, Tests Failed"
           }
           EOF
@@ -905,7 +905,7 @@ jobs:
           TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>The DocGen pipeline executed against the <strong>existing WebApp URL</strong> you supplied and the E2E tests completed successfully.</p><p><strong>Test Results:</strong><br>• Status: ✅ Passed<br>${TEST_REPORT_URL:+• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a>}<br>• Target URL: <a href='${EXISTING_URL}'>${EXISTING_URL}</a></p><p><strong>Deployment:</strong> Skipped (existing URL reuse)</p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>No infrastructure changes were made.</p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline executed against the <strong>existing WebApp URL</strong> you supplied and the E2E tests completed successfully.</p><p><strong>Test Results:</strong><br>• Status: ✅ Passed<br>${TEST_REPORT_URL:+• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a>}<br>• Target URL: <a href='${EXISTING_URL}'>${EXISTING_URL}</a></p><p><strong>Deployment:</strong> Skipped (existing URL reuse)</p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>No infrastructure changes were made.</p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Existing URL Tests Passed"
           }
           EOF
@@ -928,7 +928,7 @@ jobs:
           TEST_REPORT_URL="${{ needs.e2e-test.outputs.TEST_REPORT_URL }}"
           EMAIL_BODY=$(cat <<EOF
           {
-            "body": "<p>Dear Team,</p><p>The DocGen pipeline targeted the <strong>existing WebApp URL</strong> you supplied. Deployment was intentionally skipped, but the E2E tests have <strong>failed</strong>.</p><p><strong>Failure Details:</strong><br>• Target URL: <a href='${EXISTING_URL}'>${EXISTING_URL}</a><br>${TEST_REPORT_URL:+• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a>}<br>• Deployment: Skipped (existing URL reuse)</p><p><strong>Recommended Actions:</strong><br>• Inspect the failing test cases<br>• Verify application availability and recent changes<br>• Re-run tests after fixes</p><p><strong>Build URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Best regards,<br>Your Automation Team</p>",
+            "body": "<p>Dear Team,</p><p>The DocGen pipeline targeted the <strong>existing WebApp URL</strong> you supplied. Deployment was intentionally skipped, but the E2E tests have <strong>failed</strong>.</p><p><strong>Failure Details:</strong><br>• Target URL: <a href='${EXISTING_URL}'>${EXISTING_URL}</a><br>${TEST_REPORT_URL:+• Test Report: <a href='${TEST_REPORT_URL}'>View Report</a>}<br>• Deployment: Skipped (existing URL reuse)</p><p><strong>Recommended Actions:</strong><br>• Inspect the failing test cases<br>• Verify application availability and recent changes<br>• Re-run tests after fixes</p><p><strong>Run URL:</strong> <a href='${RUN_URL}'>${RUN_URL}</a></p><p>Best regards,<br>Your Automation Team</p>",
             "subject": "DocGen Pipeline - Existing URL Tests Failed"
           }
           EOF
