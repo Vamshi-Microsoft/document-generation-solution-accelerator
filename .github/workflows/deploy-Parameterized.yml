@@ -897,7 +897,7 @@ jobs:
           printf '%s\n' "$EMAIL_BODY"
           echo "===================================================="
 
-          curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send test failure notification"
 
@@ -943,6 +943,6 @@ jobs:
           printf '%s\n' "$EMAIL_BODY"
           echo "==========================================================="
 
-          curl -X POST "${{ secrets.EMAILNOTIFICATION_LOGICAPP_URL_TA }}" \
+          curl -X POST "${{ secrets.LOGIC_APP_URL }}" \
             -H "Content-Type: application/json" \
             -d "$EMAIL_BODY" || echo "Failed to send existing URL test failure notification"
