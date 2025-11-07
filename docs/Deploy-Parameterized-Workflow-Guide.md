@@ -69,14 +69,16 @@ schedule:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `run_e2e_tests` | Boolean | `true` | Execute end-to-end tests after deployment |
-| `cleanup_resources` | Boolean | `false` | Delete deployed resources after testing |
+| `azure_location` | Choice | `australiaeast` | Azure Location For Deployment (options: australiaeast, centralus, eastasia, eastus2, japaneast, northeurope, southeastasia, uksouth, eastus) |
+| `resource_group_name` | String | `''` | Resource Group Name (Optional) |
 | `waf_enabled` | Boolean | `false` | Enable Web Application Firewall configuration |
 | `EXP` | Boolean | `false` | Enable experimental features |
+| `build_docker_image` | Boolean | `false` | Build and push new Docker image |
+| `run_e2e_tests` | Boolean | `true` | Execute end-to-end tests after deployment |
+| `cleanup_resources` | Boolean | `false` | Delete deployed resources after testing |
 | `AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID` | String | `''` | Existing Log Analytics Workspace ID |
 | `AZURE_EXISTING_AI_PROJECT_RESOURCE_ID` | String | `''` | Existing AI Project Resource ID |
 | `existing_webapp_url` | String | `''` | Test against existing deployment instead of creating new |
-| `build_docker_image` | Boolean | `false` | Build and push new Docker image |
 
 ### Automatic Configuration Logic
 
@@ -111,7 +113,7 @@ BUILD_DOCKER_IMAGE: # Determined based on trigger type and inputs
 
 ## Job Architecture
 
-The workflow consists of 4 main jobs that execute conditionally based on configuration:
+The workflow consists of 5 main jobs that execute conditionally based on configuration:
 
 ```mermaid
 graph TD
@@ -119,6 +121,9 @@ graph TD
     B --> C[e2e-test]
     B --> D[cleanup-deployment]
     C --> D
+    B --> E[send-notification]
+    C --> E[send-notification]
+    D --> E[send-notification]
 ```
 
 ### Job Execution Matrix
@@ -129,6 +134,7 @@ graph TD
 | **deploy** | ✅ Run | ✅ Run | ✅ Run | ❌ Skip | ✅ Run |
 | **e2e-test** | ✅ Run | ✅ Run | ✅/❌ Conditional | ✅/❌ Conditional | ✅ Run |
 | **cleanup-deployment** | ✅ Run | ✅ Run | ✅/❌ Conditional | ❌ Skip | ✅ Run |
+| **send-notification** | ✅ Run | ✅ Run | ✅ Run | ✅ Run | ✅ Run |
 
 ## Job Flows and Dependencies
 
@@ -151,8 +157,9 @@ if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_docker
 1. Generate unique Docker tag (`branch-timestamp-runid`)
 2. Set up Docker Buildx
 3. Login to Azure Container Registry
-4. Build and push Docker image with multiple tags
+4. Build and push Docker image with multiple tags (includes run number tag)
 5. Verify successful build
+6. Generate Docker Build Summary with detailed build information
 
 ### 2. Deploy Job (`deploy`)
 
@@ -169,6 +176,8 @@ if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs
 **Key Features:**
 - **Quota Validation**: Checks Azure quota before deployment
 - **Dynamic Configuration**: Adapts to WAF/Non-WAF and EXP/Non-EXP settings
+- **Azure Location Selection**: Supports manual location selection or automatic via quota check
+- **Resource Group Management**: Supports custom or auto-generated resource group names
 - **Resource Management**: Creates unique resource groups and solution prefixes
 - **Docker Image Selection**: Uses appropriate image based on build status and branch
 - **Post-deployment Processing**: Runs sample data processing scripts
@@ -177,17 +186,23 @@ if: always() && (github.event_name != 'workflow_dispatch' || github.event.inputs
 - `RESOURCE_GROUP_NAME`: Created resource group name
 - `WEBAPP_URL`: Deployed web application URL
 - `ENV_NAME`: Azure Developer CLI environment name
-- `AZURE_LOCATION`: Deployment region
+- `AZURE_LOCATION`: Deployment region (infrastructure)
+- `AZURE_ENV_OPENAI_LOCATION`: Azure OpenAI deployment region
 - `IMAGE_TAG`: Docker image tag used
+- `QUOTA_FAILED`: Flag indicating if deployment failed due to quota issues
 
 **Critical Steps:**
-1. **Quota Check**: Validates sufficient Azure quotas
-2. **Configuration Validation**: Auto-enables EXP if parameters provided
-3. **Resource Generation**: Creates unique names for resources
-4. **Docker Image Determination**: Selects appropriate image tag
-5. **Azure Deployment**: Uses `azd up` for infrastructure deployment
-6. **Post-processing**: Processes sample data and configurations
-7. **Notification**: Sends success/failure notifications
+1. **Display Workflow Configuration**: Shows complete configuration summary
+2. **Validate and Auto-Configure EXP**: Automatically enables EXP if parameters provided
+3. **Quota Check**: Validates sufficient Azure quotas
+4. **Set Deployment Region**: Determines Azure location (user input or quota check result)
+5. **Resource Group Generation**: Creates unique names or uses provided custom name
+6. **Generate Unique Solution Prefix**: Creates unique prefix for Azure resources
+7. **Docker Image Determination**: Selects appropriate image tag based on build/branch
+8. **Configure WAF Parameters**: Copies WAF parameters if WAF is enabled
+9. **Azure Deployment**: Uses `azd up` for infrastructure deployment
+10. **Post-processing**: Processes sample data and configurations
+11. **Generate Job Summary**: Creates deployment summary in GitHub Actions
 
 ### 3. E2E Test Job (`e2e-test`)
 
@@ -230,6 +245,49 @@ if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.RESOURC
 - Preserves standard Docker images (`latest_waf`, `dev`, `demo`)
 - Only deletes custom-generated images with unique timestamps
 
+### 5. Send Notification Job (`send-notification`)
+
+**Execution Condition:**
+```yaml
+if: always()
+```
+
+**Purpose:**
+- Sends email notifications about pipeline execution results
+- Provides visibility into deployment status, test results, and failures
+- Notifies team members via Logic App webhook integration
+
+**Notification Scenarios:**
+
+| Scenario | Condition | Subject | Content |
+|----------|-----------|---------|---------|
+| **Quota Failure** | `needs.deploy.result == 'failure' && needs.deploy.outputs.QUOTA_FAILED == 'true'` | DocGen Pipeline - Failed (Insufficient Quota) | Quota requirements, checked regions, run URL |
+| **Deployment Failure** | `needs.deploy.result == 'failure' && needs.deploy.outputs.QUOTA_FAILED != 'true'` | DocGen Pipeline - Failed | Resource group, configuration, run URL |
+| **Deployment Success (Tests Skipped)** | `needs.deploy.result == 'success' && needs.e2e-test.result == 'skipped'` | DocGen Pipeline - Deployment Success | Resource group, web app URL, configuration |
+| **Test Success** | `needs.deploy.result == 'success' && needs.e2e-test.outputs.TEST_SUCCESS == 'true'` | DocGen Pipeline - Test Automation - Success | Deployment details, test report, web app URL |
+| **Test Failure** | `needs.deploy.result == 'success' && needs.e2e-test.outputs.TEST_SUCCESS != 'true'` | DocGen Pipeline - Test Automation - Failed | Deployment details, test report, failure info |
+| **Existing URL Success** | `needs.deploy.result == 'skipped' && needs.e2e-test.result == 'success'` | DocGen Pipeline - Test Automation Passed (Existing URL) | Target URL, test report |
+| **Existing URL Failure** | `needs.deploy.result == 'skipped' && needs.e2e-test.result == 'failure'` | DocGen Pipeline - Test Automation Failed (Existing URL) | Target URL, test report, failure details |
+
+**Key Features:**
+- **Always Executes**: Runs regardless of previous job results to ensure notifications are sent
+- **Conditional Notifications**: Sends different emails based on job outcomes
+- **Rich HTML Emails**: Includes clickable links, formatted details, and relevant context
+- **Team Visibility**: Ensures team is informed of all deployment activities
+
+**Email Content Includes:**
+- Build/Run URL for investigation
+- Resource group names (when applicable)
+- Web application URLs (when applicable)
+- Test report links (when tests run)
+- Configuration details (WAF, EXP settings)
+- Error context and troubleshooting guidance
+
+**Logic App Integration:**
+- Uses `LOGIC_APP_URL` secret for webhook endpoint
+- Sends POST request with JSON payload containing email body and subject
+- Handles notification failures gracefully with error messages
+
 ## Usage Scenarios
 
 ### Scenario 1: Testing Pull Request Changes
@@ -241,16 +299,17 @@ Flow: Deploy → Test → Cleanup
 Result: Validates PR changes in real environment
 ```
 
-### Scenario 2: Production-like Deployment with WAF
+### Scenario 2: Production-like Deployment with WAF and Custom Location
 ```yaml
 # Manual trigger via GitHub Actions UI
 Trigger: workflow_dispatch
 Parameters:
   - waf_enabled: true
+  - azure_location: eastus
   - cleanup_resources: false
   - run_e2e_tests: true
-Flow: Deploy (WAF) → Test → Keep Resources
-Result: Production-ready deployment with security features
+Flow: Deploy (WAF in eastus) → Test → Keep Resources
+Result: Production-ready deployment with security features in selected region
 ```
 
 ### Scenario 3: Testing Against Existing Deployment
@@ -285,6 +344,18 @@ Parameters:
   - AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: "project-id"
 Flow: Deploy (EXP) → Test → Cleanup
 Result: Tests experimental features with existing Azure resources
+```
+
+### Scenario 6: Custom Resource Group Deployment
+```yaml
+# Manual trigger with custom resource group
+Trigger: workflow_dispatch
+Parameters:
+  - resource_group_name: "my-custom-rg"
+  - azure_location: northeurope
+  - cleanup_resources: false
+Flow: Deploy to custom RG → Test → Keep Resources
+Result: Deploys to specified resource group in selected region
 ```
 
 ## Prerequisites
@@ -330,23 +401,50 @@ The workflow sends email notifications via Logic App webhook for:
 
 1. **Quota Check Failure**
    - Triggered when insufficient Azure quotas detected
-   - Includes build URL for investigation
+   - Includes build URL, required capacities, and checked regions
 
-2. **Deployment Success**
+2. **Deployment Failure**
+   - Triggered when deployment fails for reasons other than quota
+   - Includes resource group name, configuration details, and build URL
+
+3. **Deployment Success (Tests Skipped)**
    - Includes resource group name and web app URL
+   - Indicates that E2E tests were skipped as configured
    - Provides access links for immediate testing
 
-3. **Deployment Failure**
-   - Includes failure details and build URL
+4. **Test Success**
+   - Sent when deployment and E2E tests both succeed
+   - Includes web app URL, test report link, and configuration details
+
+5. **Test Failure**
+   - Sent when deployment succeeds but E2E tests fail
+   - Includes deployment details and test report link
    - Enables quick troubleshooting response
+
+6. **Existing URL Success**
+   - Sent when tests pass against existing webapp (deployment skipped)
+   - Includes target URL and test report
+
+7. **Existing URL Test Failure**
+   - Sent when tests fail against existing webapp (deployment skipped)
+   - Includes failure details and test report link
 
 ### Notification Format
 ```json
 {
   "body": "HTML formatted email body with deployment details",
-  "subject": "DocGen Deployment - Success/Failure"
+  "subject": "DocGen Pipeline - [Status]"
 }
 ```
+
+**Notification Types:**
+1. **Quota Failure**: Sent when quota check fails with insufficient resources
+2. **Deployment Failure**: Sent when deployment fails for reasons other than quota
+3. **Deployment Success** (with tests skipped): Sent when deployment succeeds and tests are skipped
+4. **Test Success**: Sent when both deployment and tests complete successfully
+5. **Test Failure**: Sent when deployment succeeds but tests fail
+6. **Existing URL Success**: Sent when tests pass against existing URL (deployment skipped)
+7. **Existing URL Failure**: Sent when tests fail against existing URL (deployment skipped)
 
 ### Log Analysis
 
@@ -414,6 +512,26 @@ Error: Failed to delete resource group
 - Manually delete resources if automated cleanup fails
 - Check for dependencies preventing deletion
 
+#### 6. Custom Resource Group Issues
+```bash
+Error: Resource group already exists with different configuration
+```
+**Solutions:**
+- Verify the resource group name is unique or intentionally reused
+- Check if the resource group is in the correct region
+- Ensure proper permissions on the existing resource group
+- Consider using a different resource group name
+
+#### 7. Azure Location Selection Issues
+```bash
+Warning: Selected location may not have sufficient quota
+```
+**Solutions:**
+- Let the quota check determine the best region automatically
+- Verify the manually selected region has sufficient capacity
+- Check if the region supports all required Azure services
+- Consider using a different region from the available options
+
 ### Debug Mode Activation
 
 To enable detailed debugging:
@@ -460,17 +578,21 @@ To enable detailed debugging:
 ### 1. Resource Management
 - Always use cleanup for testing environments
 - Preserve resources only for long-term testing or demo purposes
+- Use custom resource group names for organized resource management
 - Monitor Azure costs regularly
 
 ### 2. Parameter Configuration  
 - Use WAF for production-like deployments
+- Select appropriate Azure location based on requirements and quota availability
 - Enable EXP only when testing experimental features
 - Provide existing URLs to test without new deployments
+- Use custom resource group names for better organization and tracking
 
 ### 3. Monitoring
 - Set up Logic App notifications for team awareness
 - Monitor quota usage across regions
 - Track deployment success/failure rates
+- Review notification emails for all deployment scenarios
 
 ### 4. Security
 - Rotate service principal credentials regularly

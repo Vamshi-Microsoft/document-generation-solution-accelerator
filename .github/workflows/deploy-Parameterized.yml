@@ -182,7 +182,7 @@ jobs:
           else
             echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
             echo "- Docker build process encountered an error" >> $GITHUB_STEP_SUMMARY
-            echo "- Check the build logs for more details" >> $GITHUB_STEP_SUMMARY
+            echo "- ⬇️ Check the **docker-build** error under annotations for detailed error information" >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy:
@@ -620,8 +620,7 @@ jobs:
           else
             echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
             echo "- Deployment process encountered an error" >> $GITHUB_STEP_SUMMARY
-            echo "- Check the deployment logs for more details" >> $GITHUB_STEP_SUMMARY
-            echo "- Verify quota availability and permissions" >> $GITHUB_STEP_SUMMARY
+            echo "- ⬇️ Check the **deploy** error under annotations for detailed error information" >> $GITHUB_STEP_SUMMARY
           fi
 
   e2e-test:
@@ -782,8 +781,9 @@ jobs:
           else
             echo "### ❌ Cleanup Failed" >> $GITHUB_STEP_SUMMARY
             echo "- Cleanup process encountered an error" >> $GITHUB_STEP_SUMMARY
-            echo "- Some resources may still exist in Azure" >> $GITHUB_STEP_SUMMARY
             echo "- Manual cleanup may be required" >> $GITHUB_STEP_SUMMARY
+            echo "- ⬇️ Check the **cleanup-deployment** error under annotations for detailed error information" >> $GITHUB_STEP_SUMMARY
+
           fi
 
   send-notification:

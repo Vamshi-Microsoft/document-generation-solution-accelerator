@@ -139,5 +139,5 @@ jobs:
           else
             echo "### ❌ Test Results" >> $GITHUB_STEP_SUMMARY
             echo "- All test attempts failed" >> $GITHUB_STEP_SUMMARY
-            echo "- Review test report for detailed failure information" >> $GITHUB_STEP_SUMMARY
+            echo "- ⬇️ Check the e2e-test/test error under annotations for detailed error information" >> $GITHUB_STEP_SUMMARY
           fi
