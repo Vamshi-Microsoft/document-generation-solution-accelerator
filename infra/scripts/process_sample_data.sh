@@ -231,6 +231,10 @@ if [ -z "$aif_resource_id" ]; then
     aif_resource_id=$(azd env get-value AI_FOUNDRY_RESOURCE_ID)
 fi
 
+if [ -z "$managedIdentityClientId" ]; then
+    managedIdentityClientId=$(azd env get-value USER_ASSIGNED_IDENTITY_CLIENT_ID)
+fi
+
 # Get subscription id from azd env or from environment variable
 azSubscriptionId=$(azd env get-value AZURE_SUBSCRIPTION_ID) || azSubscriptionId="$AZURE_SUBSCRIPTION_ID"
 

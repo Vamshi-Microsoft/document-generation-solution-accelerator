@@ -1312,3 +1312,6 @@ output AZURE_APPLICATION_INSIGHTS_CONNECTION_STRING string = (enableMonitoring &
 
 @description('Contains Application Environment.')
 output APP_ENV string  = appEnvironment
+
+@description('Contains User Assigned Identity Client ID')
+output USER_ASSIGNED_IDENTITY_CLIENT_ID string = userAssignedIdentity.outputs.clientId
