@@ -274,9 +274,6 @@ jobs:
             exit 1  # Fail the pipeline if any other failure occurs
           fi
 
-
-
-
       - name: Set Quota Failure Output
         id: quota_failure_output
         if: env.QUOTA_FAILED == 'true'
