@@ -22,7 +22,7 @@ on:
 
 env:
     url: ${{ inputs.DOCGEN_URL }}
-    accelerator_name: "Content Processing"
+    accelerator_name: "Doc-Gen"
     test_suite: ${{ inputs.TEST_SUITE }}
 
 jobs:
