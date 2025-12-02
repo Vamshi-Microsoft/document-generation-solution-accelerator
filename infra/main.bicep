@@ -81,7 +81,7 @@ param azureAiAgentApiVersion string = '2025-05-01'
 
 @minValue(10)
 @description('Optional. AI model deployment token capacity. Defaults to 150 for optimal performance.')
-param gptModelCapacity int = 50
+param gptModelCapacity int = 150
 
 @minLength(1)
 @description('Optional. Name of the Text Embedding model to deploy:')
@@ -89,7 +89,7 @@ param embeddingModel string = 'text-embedding-ada-002'
 
 @minValue(10)
 @description('Optional. Capacity of the Embedding Model deployment')
-param embeddingDeploymentCapacity int = 50
+param embeddingDeploymentCapacity int = 80
 
 @description('Optional. Existing Log Analytics Workspace Resource ID')
 param existingLogAnalyticsWorkspaceId string = ''
