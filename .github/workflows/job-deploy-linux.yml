@@ -85,8 +85,6 @@ jobs:
         shell: bash
         run: |
           set -e
-          # Install azd (Azure Developer CLI)
-          curl -fsSL https://aka.ms/install-azd.sh | bash
 
           echo "Creating environment..."
           azd env new ${{ inputs.ENV_NAME }} --no-prompt
