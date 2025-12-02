@@ -170,21 +170,21 @@ jobs:
         id: post_deploy
         env: 
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        shell: pwsh
+        shell: bash
         run: |
-          $ErrorActionPreference = "Stop"
+          set -e
           az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-          Write-Host "Running post-deployment script..."
+          echo "Running post-deployment script..."
 
-          & ./infra/scripts/process_sample_data.ps1 `
-            "${{ env.STORAGE_ACCOUNT_NAME }}" `
-            "${{ env.STORAGE_CONTAINER_NAME }}" `
-            "${{ env.KEY_VAULT_NAME }}" `
-            "${{ env.AZURE_COSMOSDB_ACCOUNT }}" `
-            "${{ env.RESOURCE_GROUP_NAME }}" `
-            "${{ env.AI_SEARCH_SERVICE_NAME }}" `
-            "${{ secrets.AZURE_CLIENT_ID }}" `
+          bash ./infra/scripts/process_sample_data.sh \
+            "${{ env.STORAGE_ACCOUNT_NAME }}" \
+            "${{ env.STORAGE_CONTAINER_NAME }}" \
+            "${{ env.KEY_VAULT_NAME }}" \
+            "${{ env.AZURE_COSMOSDB_ACCOUNT }}" \
+            "${{ env.RESOURCE_GROUP_NAME }}" \
+            "${{ env.AI_SEARCH_SERVICE_NAME }}" \
+            "${{ secrets.AZURE_CLIENT_ID }}" \
             "${{ env.AI_FOUNDRY_RESOURCE_ID }}"
 
       - name: Generate Deploy Job Summary
