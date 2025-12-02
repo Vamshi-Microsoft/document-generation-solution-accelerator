@@ -246,9 +246,8 @@ jobs:
         id: determine_image_tag
         run: |
           if [[ "${{ env.BUILD_DOCKER_IMAGE }}" == "true" ]]; then
-            # Use the tag from docker-build job if it was built
-            if [[ "${{ needs.docker-build.result }}" == "success" ]]; then
-              IMAGE_TAG="${{ needs.docker-build.outputs.IMAGE_TAG }}"
+            if [[ -n "${{ inputs.docker_image_tag }}" ]]; then
+              IMAGE_TAG="${{ inputs.docker_image_tag }}"
               echo "🔗 Using Docker image tag from build job: $IMAGE_TAG"
             else
               echo "❌ Docker build job failed or was skipped, but BUILD_DOCKER_IMAGE is true"
