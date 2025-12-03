@@ -117,13 +117,13 @@ jobs:
             if [[ -n "${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}" ]]; then
               EXP_LOG_ANALYTICS_ID="${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
             else
-              EXP_LOG_ANALYTICS_ID="${{ secrets.EXP_LOG_ANALYTICS_WORKSPACE_ID }}"
+              EXP_LOG_ANALYTICS_ID="${{ secrets.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}"
             fi
             
             if [[ -n "${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" ]]; then
               EXP_AI_PROJECT_ID="${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
             else
-              EXP_AI_PROJECT_ID="${{ secrets.EXP_AI_PROJECT_RESOURCE_ID }}"
+              EXP_AI_PROJECT_ID="${{ secrets.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
             fi
             
             echo "AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: $EXP_LOG_ANALYTICS_ID"

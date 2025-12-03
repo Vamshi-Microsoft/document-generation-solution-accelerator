@@ -114,7 +114,7 @@ jobs:
             if ("${{ inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}" -ne "") {
               $EXP_AI_PROJECT_ID = "${{ inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
             } else {
-              $EXP_AI_PROJECT_ID = "${{ secrets.AZURE_ENV_FOUNDRY_PROJECT_ID }}"
+              $EXP_AI_PROJECT_ID = "${{ secrets.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}"
             }
             
             Write-Host "AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: $EXP_LOG_ANALYTICS_ID"
