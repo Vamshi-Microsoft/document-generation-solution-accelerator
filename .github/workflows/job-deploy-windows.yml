@@ -191,7 +191,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "## 🚀 Deploy Job Summary (Linux)" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Deploy Job Summary (Windows)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
