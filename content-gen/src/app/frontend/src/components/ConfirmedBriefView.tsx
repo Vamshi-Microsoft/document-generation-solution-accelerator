@@ -80,7 +80,7 @@ export function ConfirmedBriefView({ brief }: ConfirmedBriefViewProps) {
                   color: tokens.colorNeutralForeground3,
                 }}
               >
-                {value.length > 100 ? value.substring(0, 100) + '...' : value}
+                {value}
               </Text>
             </div>
           );
