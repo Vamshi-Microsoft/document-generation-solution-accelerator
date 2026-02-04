@@ -1,0 +1,94 @@
+version: 2
+
+updates:
+  # GitHub Actions - grouped
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # ============================================
+  # Python (pip) dependencies - content-gen
+  # ============================================
+
+  # content-gen/src/backend
+  - package-ecosystem: "pip"
+    directory: "/content-gen/src/backend"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      content-gen-backend-python:
+        patterns:
+          - "*"
+
+  # content-gen/infra/vscode_web
+  - package-ecosystem: "pip"
+    directory: "/content-gen/infra/vscode_web"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      content-gen-vscode-web-python:
+        patterns:
+          - "*"
+
+  # content-gen/scripts
+  - package-ecosystem: "pip"
+    directory: "/content-gen/scripts"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      content-gen-scripts-python:
+        patterns:
+          - "*"
+
+  # ============================================
+  # npm dependencies - content-gen
+  # ============================================
+
+  # content-gen/src/app/frontend
+  - package-ecosystem: "npm"
+    directory: "/content-gen/src/app/frontend"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      content-gen-frontend-npm:
+        patterns:
+          - "*"
+
+  # content-gen/src/app/frontend-server
+  - package-ecosystem: "npm"
+    directory: "/content-gen/src/app/frontend-server"
+    schedule:
+      interval: "monthly"
+    target-branch: "dependabotchanges"
+    commit-message:
+      prefix: "build"
+    open-pull-requests-limit: 10
+    groups:
+      content-gen-frontend-server-npm:
+        patterns:
+          - "*"
