@@ -47,6 +47,7 @@ jobs:
     runs-on: windows-latest
     env:
       AZURE_DEV_COLLECT_TELEMETRY: ${{ vars.AZURE_DEV_COLLECT_TELEMETRY }}
+      PYTHONUTF8: 1
     outputs:
       WEB_APPURL: ${{ steps.get_output_windows.outputs.WEB_APPURL }}
     steps:
