@@ -285,8 +285,8 @@ jobs:
           # Get deployment outputs using azd
           Write-Host "Extracting deployment outputs..."
           $webAppUrl = azd env get-value WEB_APP_URL
-          echo "WEB_APPURL=$webAppUrl" >> $GITHUB_ENV
-          echo "WEB_APPURL=$webAppUrl" >> $GITHUB_OUTPUT
+          echo "WEB_APPURL=$webAppUrl" >> $env:GITHUB_ENV
+          echo "WEB_APPURL=$webAppUrl" >> $env:GITHUB_OUTPUT
 
       - name: Generate Deploy Job Summary
         if: always()

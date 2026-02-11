@@ -290,8 +290,8 @@ jobs:
 
             # Set core parameters
             azd env set AZURE_SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
-            azd env set azureAiServiceLocation="$AZURE_ENV_OPENAI_LOCATION"
-            azd env set AZURE_LOCATION="$AZURE_LOCATION"
+            azd env set azureAiServiceLocation="$INPUT_AZURE_ENV_OPENAI_LOCATION"
+            azd env set AZURE_LOCATION="$INPUT_AZURE_LOCATION"
             azd env set AZURE_RESOURCE_GROUP="$INPUT_RESOURCE_GROUP_NAME"
 
             # Set ACR endpoint based on BUILD_DOCKER_IMAGE flag
