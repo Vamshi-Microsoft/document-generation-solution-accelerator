@@ -44,20 +44,6 @@ else
     REGIONS=("westus3" "eastus2" "uaenorth" "polandcentral" "swedencentral" "australiaeast" "eastus" "uksouth" "japaneast")
 fi
 
-# ---- Image Model Region Constraints ----
-# gpt-image-1 GlobalStandard: westus3, eastus2, uaenorth, polandcentral, swedencentral
-# gpt-image-1.5 GlobalStandard: westus3, eastus2, uaenorth, polandcentral, swedencentral
-# dall-e-3 Standard: available in most AI service regions (no extra restriction)
-# none: no image model deployed
-
-declare -A IMAGE_MODEL_VALID_REGIONS
-IMAGE_MODEL_VALID_REGIONS=(
-  ["gpt-image-1"]="westus3 eastus2 uaenorth polandcentral swedencentral"
-  ["gpt-image-1.5"]="westus3 eastus2 uaenorth polandcentral swedencentral"
-  ["dall-e-3"]="all"
-  ["none"]="all"
-)
-
 # Map image model choice to Azure quota model name
 declare -A IMAGE_MODEL_QUOTA_NAME
 IMAGE_MODEL_QUOTA_NAME=(
@@ -133,36 +119,11 @@ else
 fi
 echo ""
 
-# ---- Helper: Check if region supports the selected image model ----
-is_region_valid_for_image_model() {
-    local region="$1"
-    local valid_regions="${IMAGE_MODEL_VALID_REGIONS[$IMAGE_MODEL_CHOICE]}"
-
-    if [[ "$valid_regions" == "all" || "$IMAGE_MODEL_CHOICE" == "none" ]]; then
-        return 0
-    fi
-
-    for vr in $valid_regions; do
-        if [[ "$vr" == "$region" ]]; then
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 # ---- Main Quota Check Loop ----
 VALID_REGION=""
 for REGION in "${REGIONS[@]}"; do
     echo "========================================"
     echo "🔍 Checking region: $REGION"
-
-    # First, check if this region supports the selected image model
-    if ! is_region_valid_for_image_model "$REGION"; then
-        echo "   ⚠️  Region '$REGION' does not support '$IMAGE_MODEL_CHOICE' (GlobalStandard). Skipping."
-        echo "   Valid regions: ${IMAGE_MODEL_VALID_REGIONS[$IMAGE_MODEL_CHOICE]}"
-        continue
-    fi
 
     QUOTA_INFO=$(az cognitiveservices usage list --location "$REGION" --output json 2>/dev/null)
     if [ -z "$QUOTA_INFO" ]; then
