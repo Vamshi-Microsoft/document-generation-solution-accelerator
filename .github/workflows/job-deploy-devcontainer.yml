@@ -23,6 +23,9 @@ on:
       IMAGE_TAG:
         required: true
         type: string
+      BUILD_DOCKER_IMAGE:
+        required: true
+        type: string
       EXP:
         required: true
         type: string
@@ -221,6 +224,7 @@ jobs:
           INPUT_AZURE_LOCATION: ${{ inputs.AZURE_LOCATION }}
           INPUT_RESOURCE_GROUP_NAME: ${{ inputs.RESOURCE_GROUP_NAME }}
           INPUT_IMAGE_TAG: ${{ inputs.IMAGE_TAG }}
+          INPUT_BUILD_DOCKER_IMAGE: ${{ inputs.BUILD_DOCKER_IMAGE }}
           INPUT_EXP: ${{ inputs.EXP }}
           INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}
           INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}
@@ -245,6 +249,7 @@ jobs:
             INPUT_AZURE_LOCATION
             INPUT_RESOURCE_GROUP_NAME
             INPUT_IMAGE_TAG
+            INPUT_BUILD_DOCKER_IMAGE
             INPUT_EXP
             INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID
             INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID
@@ -283,13 +288,16 @@ jobs:
             # Set core parameters
             azd env set AZURE_SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
             azd env set azureAiServiceLocation="$AZURE_ENV_OPENAI_LOCATION"
-            azd env set AZURE_LOCATION="$AZURE_ENV_OPENAI_LOCATION"
+            azd env set AZURE_LOCATION="$AZURE_LOCATION"
             azd env set AZURE_RESOURCE_GROUP="$INPUT_RESOURCE_GROUP_NAME"
 
-            # Set ACR name from secret
-            if [[ -n "$SECRET_ACR_TEST_USERNAME" ]]; then
-              azd env set AZURE_ENV_ACR_NAME="$SECRET_ACR_TEST_USERNAME"
-              echo "Set ACR name from secret"
+            # Set ACR endpoint based on BUILD_DOCKER_IMAGE flag
+            if [[ "$INPUT_BUILD_DOCKER_IMAGE" == "true" ]]; then
+              ACR_NAME=$(echo "$SECRET_ACR_TEST_LOGIN_SERVER")
+              azd env set AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT="$ACR_NAME"
+              echo "Set ACR name to: $ACR_NAME"
+            else
+              echo "Skipping ACR name configuration (using existing image)"
             fi
 
             # Set EXP parameters if enabled
