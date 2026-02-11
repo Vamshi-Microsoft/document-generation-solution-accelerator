@@ -224,6 +224,9 @@ jobs:
         run: |
           set -e
 
+          # Change to content-gen directory where azure.yaml lives
+          cd content-gen
+
           echo "Creating environment..."
           azd env new "$ENV_NAME" --no-prompt
           echo "Environment created: $ENV_NAME"
@@ -275,8 +278,7 @@ jobs:
             fi
           fi
 
-          # Deploy using azd up (from content-gen directory where azure.yaml lives)
-          cd content-gen
+          # Deploy using azd up
           azd up --no-prompt
 
           # Get deployment outputs using azd

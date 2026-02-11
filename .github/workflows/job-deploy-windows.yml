@@ -226,6 +226,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
+          # Change to content-gen directory where azure.yaml lives
+          Push-Location content-gen
+
           Write-Host "Creating environment..."
           azd env new $env:ENV_NAME --no-prompt
           Write-Host "Environment created: $env:ENV_NAME"
@@ -273,8 +276,7 @@ jobs:
             Write-Host "❌ EXP DISABLED - Skipping EXP parameters"
           }
 
-          # Deploy using azd up (from content-gen directory where azure.yaml lives)
-          Push-Location content-gen
+          # Deploy using azd up
           azd up --no-prompt
 
           Write-Host "✅ Deployment succeeded."

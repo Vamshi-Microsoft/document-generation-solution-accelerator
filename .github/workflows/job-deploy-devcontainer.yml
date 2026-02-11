@@ -278,7 +278,10 @@ jobs:
               --client-secret "$AZURE_CLIENT_SECRET" \
               --tenant-id "$AZURE_TENANT_ID"
 
-            # 2. Initialize azd environment
+            # 2. Change to content-gen directory where azure.yaml lives
+            cd content-gen
+
+            # Initialize azd environment
             echo "⚙️ Creating azd environment: $INPUT_ENV_NAME"
             azd env new "$INPUT_ENV_NAME" --no-prompt
 
@@ -329,9 +332,8 @@ jobs:
               fi
             fi
 
-            # 3. Deploy using azd up (from content-gen directory where azure.yaml lives)
+            # 3. Deploy using azd up
             echo "🚀 Running azd up..."
-            cd content-gen
             azd up --no-prompt
 
             # 4. Export azd env values to a file so the host can read them
