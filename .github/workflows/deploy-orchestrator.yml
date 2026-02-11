@@ -72,6 +72,7 @@ env:
 permissions:
   contents: read
   actions: read
+  packages: write  # Required by job-deploy → job-deploy-devcontainer to push devcontainer image to GHCR
   
 jobs:
   docker-build:
