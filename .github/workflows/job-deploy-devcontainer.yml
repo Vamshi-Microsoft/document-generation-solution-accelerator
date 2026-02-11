@@ -227,7 +227,6 @@ jobs:
           INPUT_EXP: ${{ inputs.EXP }}
           INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}
           INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}
-          EVENT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}
           SECRET_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ secrets.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}
           SECRET_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ secrets.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}
           SECRET_ACR_TEST_USERNAME: ${{ secrets.ACR_TEST_USERNAME }}
@@ -252,7 +251,6 @@ jobs:
             INPUT_EXP
             INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID
             INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID
-            EVENT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID
             SECRET_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID
             SECRET_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID
             SECRET_ACR_TEST_USERNAME
@@ -289,14 +287,14 @@ jobs:
 
             # Set core parameters
             azd env set AZURE_SUBSCRIPTION_ID="$AZURE_SUBSCRIPTION_ID"
-            azd env set azureAiServiceLocation="$INPUT_AZURE_ENV_OPENAI_LOCATION"
+            azd env set AZURE_ENV_OPENAI_LOCATION="$INPUT_AZURE_ENV_OPENAI_LOCATION"
             azd env set AZURE_LOCATION="$INPUT_AZURE_LOCATION"
             azd env set AZURE_RESOURCE_GROUP="$INPUT_RESOURCE_GROUP_NAME"
 
             # Set ACR endpoint based on BUILD_DOCKER_IMAGE flag
             if [[ "$INPUT_BUILD_DOCKER_IMAGE" == "true" ]]; then
               ACR_NAME=$(echo "$SECRET_ACR_TEST_LOGIN_SERVER")
-              azd env set acrName="$ACR_NAME"
+              azd env set ACR_NAME="$ACR_NAME"
               echo "Set ACR name to: $ACR_NAME"
             else
               echo "Skipping ACR name configuration (using existing image)"
@@ -308,8 +306,6 @@ jobs:
 
               if [[ -n "$INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID" ]]; then
                 EXP_LOG_ANALYTICS_ID="$INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID"
-              elif [[ -n "$EVENT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID" ]]; then
-                EXP_LOG_ANALYTICS_ID="$EVENT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID"
               else
                 EXP_LOG_ANALYTICS_ID="$SECRET_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID"
               fi

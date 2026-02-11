@@ -236,16 +236,16 @@ jobs:
           
           # Set additional parameters
           azd env set AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          azd env set azureAiServiceLocation="$AZURE_ENV_OPENAI_LOCATION"
+          azd env set AZURE_ENV_OPENAI_LOCATION="$AZURE_ENV_OPENAI_LOCATION"
           azd env set AZURE_LOCATION="$AZURE_LOCATION"
           azd env set AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
-          azd env set imageTag="$IMAGE_TAG"
+          azd env set IMAGE_TAG="$IMAGE_TAG"
           
           # Set ACR name only when building Docker image
           if [[ "$BUILD_DOCKER_IMAGE" == "true" ]]; then
             # Extract ACR name from login server and set as environment variable
             ACR_NAME="${{ secrets.ACR_TEST_USERNAME }}"
-            azd env set acrName="$ACR_NAME"
+            azd env set ACR_NAME="$ACR_NAME"
             echo "Set ACR name to: $ACR_NAME"
           else
             echo "Skipping ACR name configuration (using existing image)"
