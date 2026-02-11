@@ -1,6 +1,5 @@
 name: Deploy Steps - DevContainer
 
-# This workflow uses the same devcontainer as Codespaces.
 # The devcontainer (Dockerfile + features + post-create script) installs everything:
 #   Python 3.11, Azure CLI + Bicep, azd, Node.js, Poetry, pip dependencies
 # So the workflow simply: builds the container → logs in → runs azd up.
@@ -211,7 +210,7 @@ jobs:
         shell: bash
         run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/devcontainer" >> $GITHUB_ENV
 
-      # Build devcontainer and run azd up inside it — identical to Codespaces
+      # Build devcontainer and run azd up inside it
       - name: Deploy with azd up in DevContainer
         uses: devcontainers/ci@v0.3
         env:
@@ -421,7 +420,6 @@ jobs:
           echo "| **Azure Region (Infrastructure)** | \`$AZURE_LOCATION\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Azure OpenAI Region** | \`$AZURE_ENV_OPENAI_LOCATION\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Docker Image Tag** | \`$IMAGE_TAG\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Deploy Method** | 🐳 DevContainer (same as Codespaces) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [[ "$JOB_STATUS" == "success" ]]; then
