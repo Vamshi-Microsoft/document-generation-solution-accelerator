@@ -67,6 +67,7 @@ env:
 permissions:
   contents: read
   actions: read
+  packages: write
   
 jobs:
   docker-build:

@@ -596,7 +596,7 @@ jobs:
   e2e-test:
     if: always() && ((needs.deploy.result == 'success' && needs.deploy.outputs.WEBAPP_URL != '') || (github.event.inputs.existing_webapp_url != '' && github.event.inputs.existing_webapp_url != null)) && (github.event_name != 'workflow_dispatch' || github.event.inputs.run_e2e_tests == 'true' || github.event.inputs.run_e2e_tests == null)
     needs: [docker-build, deploy]
-    uses: ./.github/workflows/test-automation.yml
+    uses: ./.github/workflows/test-automation-v2.yml
     with:
       DOCGEN_URL: ${{ github.event.inputs.existing_webapp_url || needs.deploy.outputs.WEBAPP_URL }}
     secrets: inherit

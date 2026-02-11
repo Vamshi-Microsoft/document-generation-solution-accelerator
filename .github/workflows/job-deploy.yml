@@ -106,6 +106,7 @@ env:
 permissions:
   contents: read
   actions: read
+  packages: write  # Required by job-deploy-devcontainer to push devcontainer image to GHCR
   
 jobs:
   azure-setup:
