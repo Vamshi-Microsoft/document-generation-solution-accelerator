@@ -286,6 +286,29 @@ jobs:
           echo "WEB_APP_URL=$WEB_APP_URL" >> $GITHUB_ENV
           echo "WEB_APP_URL=$WEB_APP_URL" >> $GITHUB_OUTPUT
 
+      - name: Assign Role Assignments
+        if: success()
+        shell: bash
+        env:
+          RESOURCE_GROUP_NAME: ${{ inputs.RESOURCE_GROUP_NAME }}
+        run: |
+          echo "🔐 Assigning role assignments to ACI managed identity..."
+          # Find the ACI container name in the resource group
+          ACI_NAME=$(az container list \
+            --resource-group "$RESOURCE_GROUP_NAME" \
+            --query "[0].name" -o tsv 2>/dev/null)
+
+          if [ -z "$ACI_NAME" ]; then
+            echo "⚠️ No ACI container found in resource group '$RESOURCE_GROUP_NAME'. Skipping role assignments."
+            exit 0
+          fi
+
+          echo "Found ACI container: $ACI_NAME"
+          chmod +x content-gen/infra/scripts/assign_aci_roles.sh
+          bash content-gen/infra/scripts/assign_aci_roles.sh \
+            -g "$RESOURCE_GROUP_NAME" \
+            -c "$ACI_NAME"
+
       - name: Generate Deploy Job Summary
         if: always()
         env:
