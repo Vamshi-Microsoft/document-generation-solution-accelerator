@@ -49,6 +49,18 @@
     },
     "imageTag": {
       "value": "${imageTag=latest}"
+    },
+    "enablePrivateNetworking": {
+      "value": true
+    },
+    "enableMonitoring": {
+      "value": true
+    },
+    "enableScalability": {
+      "value": true
+    },
+    "enableRedundancy": {
+      "value": true
     }
   }
 }

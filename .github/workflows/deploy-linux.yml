@@ -4,14 +4,12 @@ on:
     branches:
       - main
     paths:
-      - 'src/frontend/**'
-      - 'src/**/*.py'
-      - 'src/requirements*.txt'
-      - 'src/WebApp.Dockerfile'
-      - '!src/tests/**'
-      - 'infra/**/*.bicep'
-      - 'infra/**/*.json'
-      - '*.yaml'
+      - 'content-gen/src/**'
+      - '!content-gen/src/tests/**'
+      - 'content-gen/infra/**/*.bicep'
+      - 'content-gen/infra/**/*.json'
+      - 'content-gen/*.yaml'
+      - 'content-gen/scripts/**'
       - '.github/workflows/deploy-*.yml'
   workflow_run:
     workflows: ["Build Docker and Optional Push"]
@@ -90,6 +88,16 @@ on:
         required: false
         default: ''
         type: string
+      image_model_choice:
+        description: 'Image Model to Deploy'
+        required: false
+        default: 'gpt-image-1'
+        type: choice
+        options:
+          - 'gpt-image-1'
+          - 'gpt-image-1.5'
+          - 'dall-e-3'
+          - 'none'
         
   schedule:
     - cron: '0 9,21 * * *'  # Runs at 9:00 AM and 9:00 PM GMT
@@ -111,6 +119,7 @@ jobs:
       azure_env_log_analytics_workspace_id: ${{ steps.validate.outputs.azure_env_log_analytics_workspace_id }}
       azure_existing_ai_project_resource_id: ${{ steps.validate.outputs.azure_existing_ai_project_resource_id }}
       existing_webapp_url: ${{ steps.validate.outputs.existing_webapp_url }}
+      image_model_choice: ${{ steps.validate.outputs.image_model_choice }}
     steps:
       - name: Validate Workflow Input Parameters
         id: validate
@@ -126,6 +135,7 @@ jobs:
           INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID: ${{ github.event.inputs.AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID }}
           INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ github.event.inputs.AZURE_EXISTING_AI_PROJECT_RESOURCE_ID }}
           INPUT_EXISTING_WEBAPP_URL: ${{ github.event.inputs.existing_webapp_url }}
+          INPUT_IMAGE_MODEL_CHOICE: ${{ github.event.inputs.image_model_choice }}
         run: |
           echo "🔍 Validating workflow input parameters..."
           VALIDATION_FAILED=false
@@ -262,6 +272,16 @@ jobs:
           echo "azure_env_log_analytics_workspace_id=$INPUT_AZURE_ENV_LOG_ANALYTICS_WORKSPACE_ID" >> $GITHUB_OUTPUT
           echo "azure_existing_ai_project_resource_id=$INPUT_AZURE_EXISTING_AI_PROJECT_RESOURCE_ID" >> $GITHUB_OUTPUT
           echo "existing_webapp_url=$INPUT_EXISTING_WEBAPP_URL" >> $GITHUB_OUTPUT
+          
+          # Validate and output image_model_choice
+          IMAGE_MODEL="${INPUT_IMAGE_MODEL_CHOICE:-gpt-image-1}"
+          ALLOWED_MODELS=("gpt-image-1" "gpt-image-1.5" "dall-e-3" "none")
+          if [[ ! " ${ALLOWED_MODELS[@]} " =~ " ${IMAGE_MODEL} " ]]; then
+            echo "❌ ERROR: image_model_choice '$IMAGE_MODEL' is invalid. Allowed: ${ALLOWED_MODELS[*]}"
+            exit 1
+          fi
+          echo "✅ image_model_choice: '$IMAGE_MODEL' is valid"
+          echo "image_model_choice=$IMAGE_MODEL" >> $GITHUB_OUTPUT
 
   Run:
     needs: validate-inputs
@@ -280,4 +300,5 @@ jobs:
       AZURE_EXISTING_AI_PROJECT_RESOURCE_ID: ${{ needs.validate-inputs.outputs.azure_existing_ai_project_resource_id || '' }}
       existing_webapp_url: ${{ needs.validate-inputs.outputs.existing_webapp_url || '' }}
       trigger_type: ${{ github.event_name }}
+      image_model_choice: ${{ needs.validate-inputs.outputs.image_model_choice || 'gpt-image-1' }}
     secrets: inherit

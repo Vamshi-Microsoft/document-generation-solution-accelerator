@@ -66,6 +66,11 @@ on:
         required: false
         default: ''
         type: string
+      image_model_choice:
+        description: 'Image model to deploy (gpt-image-1, gpt-image-1.5, dall-e-3, none)'
+        required: false
+        default: 'gpt-image-1'
+        type: string
     outputs:
       RESOURCE_GROUP_NAME:
         description: "Resource Group Name"
@@ -91,7 +96,7 @@ on:
 
 env:
   GPT_MIN_CAPACITY: 150
-  TEXT_EMBEDDING_MIN_CAPACITY: 80
+  IMAGE_MODEL_MIN_CAPACITY: 1
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.head_ref || github.ref_name }}
   WAF_ENABLED: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.waf_enabled || false) || false }}
   EXP: ${{ inputs.trigger_type == 'workflow_dispatch' && (inputs.EXP || false) || false }}
@@ -333,13 +338,14 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           GPT_MIN_CAPACITY: ${{ env.GPT_MIN_CAPACITY }}
-          TEXT_EMBEDDING_MIN_CAPACITY: ${{ env.TEXT_EMBEDDING_MIN_CAPACITY }}
+          IMAGE_MODEL_CHOICE: ${{ inputs.image_model_choice || 'gpt-image-1' }}
+          IMAGE_MODEL_MIN_CAPACITY: ${{ env.IMAGE_MODEL_MIN_CAPACITY }}
           AZURE_REGIONS: ${{ vars.AZURE_REGIONS }}
         run: |
-          chmod +x scripts/checkquota.sh
-          if ! scripts/checkquota.sh; then
+          chmod +x content-gen/scripts/checkquota.sh
+          if ! content-gen/scripts/checkquota.sh; then
             # If quota check fails due to insufficient quota, set the flag
-            if grep -q "No region with sufficient quota found" scripts/checkquota.sh; then
+            if grep -q "No region with sufficient quota found" content-gen/scripts/checkquota.sh; then
               echo "QUOTA_FAILED=true" >> $GITHUB_ENV
             fi
             exit 1  # Fail the pipeline if any other failure occurs
@@ -377,6 +383,64 @@ jobs:
             echo "Using location from quota check for automatic triggers: $VALID_REGION"
             echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_ENV
             echo "AZURE_LOCATION=$VALID_REGION" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check Azure Search Service Quota
+        id: search-quota-check
+        shell: bash
+        run: |
+          # Determine search tier based on WAF (scalability) setting
+          # WAF enabled → standard tier, WAF disabled → basic tier
+          if [[ "${{ env.WAF_ENABLED }}" == "true" ]]; then
+            SEARCH_TIER="standard"
+            SEARCH_TIER_DISPLAY="Standard"
+          else
+            SEARCH_TIER="basic"
+            SEARCH_TIER_DISPLAY="Basic"
+          fi
+
+          echo "🔍 Checking Azure Search $SEARCH_TIER_DISPLAY tier quota in region: ${{ env.AZURE_LOCATION }}"
+
+          # Get current usage and limits for Azure Search in the selected region using REST API
+          SEARCH_USAGE=$(az rest --method get \
+            --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/providers/Microsoft.Search/locations/${{ env.AZURE_LOCATION }}/usages?api-version=2024-03-01-preview" \
+            -o json 2>/dev/null || echo '{"value":[]}')
+
+          if [ "$(echo "$SEARCH_USAGE" | jq '.value | length')" -eq 0 ]; then
+            echo "⚠️ Could not retrieve Azure Search quota information. Proceeding with deployment..."
+            echo "SEARCH_QUOTA_CHECK=skipped" >> $GITHUB_OUTPUT
+          else
+            TIER_USAGE=$(echo "$SEARCH_USAGE" | jq -r --arg tier "$SEARCH_TIER" '.value[] | select(.name.value == $tier) | .currentValue // 0')
+            TIER_LIMIT=$(echo "$SEARCH_USAGE" | jq -r --arg tier "$SEARCH_TIER" '.value[] | select(.name.value == $tier) | .limit // 0')
+            TIER_AVAILABLE=$((TIER_LIMIT - TIER_USAGE))
+
+            echo "Azure Search $SEARCH_TIER_DISPLAY Tier Quota for ${{ env.AZURE_LOCATION }}:"
+            echo "  Current Usage: $TIER_USAGE"
+            echo "  Limit: $TIER_LIMIT"
+            echo "  Available: $TIER_AVAILABLE"
+
+            if [ "$TIER_AVAILABLE" -lt 1 ]; then
+              echo ""
+              echo "❌ ERROR: Insufficient Azure Search $SEARCH_TIER_DISPLAY tier quota in region: ${{ env.AZURE_LOCATION }}"
+              echo "Please select a different region."
+
+              # Add error to GitHub Summary
+              echo "## ❌ Azure Search Quota Check Failed" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Region:** \`${{ env.AZURE_LOCATION }}\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| **Tier** | $SEARCH_TIER_DISPLAY |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Current Usage** | $TIER_USAGE |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Limit** | $TIER_LIMIT |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Available** | $TIER_AVAILABLE |" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+
+            echo ""
+            echo "✅ Azure Search $SEARCH_TIER_DISPLAY tier quota check passed."
+            echo "SEARCH_QUOTA_CHECK=passed" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate Resource Group Name

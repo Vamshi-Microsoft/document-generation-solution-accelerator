@@ -192,7 +192,7 @@ jobs:
           WAF_ENABLED: ${{ inputs.WAF_ENABLED }}
         run: |
           if [[ "$WAF_ENABLED" == "true" ]]; then
-            cp infra/main.waf.parameters.json infra/main.parameters.json
+            cp content-gen/infra/main.waf.parameters.json content-gen/infra/main.parameters.json
             echo "✅ Successfully copied WAF parameters to main parameters file"
           else
             echo "🔧 Configuring Non-WAF deployment - using default main.parameters.json..."
@@ -273,67 +273,17 @@ jobs:
             Write-Host "❌ EXP DISABLED - Skipping EXP parameters"
           }
 
-          # Deploy using azd up
+          # Deploy using azd up (from content-gen directory where azure.yaml lives)
+          Push-Location content-gen
           azd up --no-prompt
-          
+
           Write-Host "✅ Deployment succeeded."
 
           # Get deployment outputs using azd
           Write-Host "Extracting deployment outputs..."
-          $DEPLOY_OUTPUT = azd env get-values --output json | ConvertFrom-Json
-          Write-Host "Deployment output: $($DEPLOY_OUTPUT | ConvertTo-Json -Depth 10)"
-          
-          if (-not $DEPLOY_OUTPUT) {
-            Write-Host "Error: Deployment output is empty. Please check the deployment logs."
-            exit 1
-          }
-
-
-          $AI_FOUNDRY_RESOURCE_ID = $DEPLOY_OUTPUT.AI_FOUNDRY_RESOURCE_ID
-          "AI_FOUNDRY_RESOURCE_ID=$AI_FOUNDRY_RESOURCE_ID" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $AI_SEARCH_SERVICE_NAME = $DEPLOY_OUTPUT.AI_SEARCH_SERVICE_NAME
-          "AI_SEARCH_SERVICE_NAME=$AI_SEARCH_SERVICE_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $AZURE_COSMOSDB_ACCOUNT = $DEPLOY_OUTPUT.AZURE_COSMOSDB_ACCOUNT
-          "AZURE_COSMOSDB_ACCOUNT=$AZURE_COSMOSDB_ACCOUNT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $STORAGE_ACCOUNT_NAME = $DEPLOY_OUTPUT.STORAGE_ACCOUNT_NAME
-          "STORAGE_ACCOUNT_NAME=$STORAGE_ACCOUNT_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $STORAGE_CONTAINER_NAME = $DEPLOY_OUTPUT.STORAGE_CONTAINER_NAME
-          "STORAGE_CONTAINER_NAME=$STORAGE_CONTAINER_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $KEY_VAULT_NAME = $DEPLOY_OUTPUT.KEY_VAULT_NAME
-          "KEY_VAULT_NAME=$KEY_VAULT_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $RESOURCE_GROUP_NAME = $DEPLOY_OUTPUT.RESOURCE_GROUP_NAME
-          "RESOURCE_GROUP_NAME=$RESOURCE_GROUP_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-          $WEB_APP_URL = $DEPLOY_OUTPUT.WEB_APP_URL
-          "WEB_APPURL=$WEB_APP_URL" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "WEB_APPURL=$WEB_APP_URL" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Run Post-Deployment Script
-        id: post_deploy
-        env: 
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        shell: bash
-        run: |
-          set -e
-          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-          echo "Running post-deployment script..."
-
-          bash ./infra/scripts/process_sample_data.sh \
-            "${{ env.STORAGE_ACCOUNT_NAME }}" \
-            "${{ env.STORAGE_CONTAINER_NAME }}" \
-            "${{ env.KEY_VAULT_NAME }}" \
-            "${{ env.AZURE_COSMOSDB_ACCOUNT }}" \
-            "${{ env.RESOURCE_GROUP_NAME }}" \
-            "${{ env.AI_SEARCH_SERVICE_NAME }}" \
-            "${{ secrets.AZURE_CLIENT_ID }}" \
-            "${{ env.AI_FOUNDRY_RESOURCE_ID }}"
+          $webAppUrl = azd env get-value WEB_APP_URL
+          echo "WEB_APPURL=$webAppUrl" >> $GITHUB_ENV
+          echo "WEB_APPURL=$webAppUrl" >> $GITHUB_OUTPUT
 
       - name: Generate Deploy Job Summary
         if: always()
