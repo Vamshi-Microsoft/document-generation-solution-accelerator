@@ -516,8 +516,8 @@ jobs:
             
             # Determine image tag based on branch
             if [[ "$BRANCH_NAME" == "main" ]]; then
-              IMAGE_TAG="latest_waf"
-              echo "Using main branch - image tag: latest_waf"
+              IMAGE_TAG="latest"
+              echo "Using main branch - image tag: latest"
             elif [[ "$BRANCH_NAME" == "dev" ]]; then
               IMAGE_TAG="dev"
               echo "Using dev branch - image tag: dev"
@@ -525,8 +525,8 @@ jobs:
               IMAGE_TAG="demo"
               echo "Using demo branch - image tag: demo"
             else
-              IMAGE_TAG="latest_waf"
-              echo "Using default for branch '$BRANCH_NAME' - image tag: latest_waf"
+              IMAGE_TAG="latest"
+              echo "Using default for branch '$BRANCH_NAME' - image tag: latest"
             fi
             
             echo "Using existing Docker image tag: $IMAGE_TAG"
