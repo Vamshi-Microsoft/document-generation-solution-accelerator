@@ -297,7 +297,7 @@ jobs:
             # Set ACR endpoint based on BUILD_DOCKER_IMAGE flag
             if [[ "$INPUT_BUILD_DOCKER_IMAGE" == "true" ]]; then
               ACR_NAME=$(echo "$SECRET_ACR_TEST_LOGIN_SERVER")
-              azd env set AZURE_ENV_CONTAINER_REGISTRY_ENDPOINT="$ACR_NAME"
+              azd env set acrName="$ACR_NAME"
               echo "Set ACR name to: $ACR_NAME"
             else
               echo "Skipping ACR name configuration (using existing image)"
