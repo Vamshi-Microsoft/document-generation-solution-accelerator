@@ -58,9 +58,6 @@
     },
     "enableScalability": {
       "value": true
-    },
-    "enableRedundancy": {
-      "value": true
     }
   }
 }
