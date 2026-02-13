@@ -67,7 +67,7 @@ env:
 permissions:
   contents: read
   actions: read
-
+  
 jobs:
   docker-build:
     uses: ./.github/workflows/job-docker-build.yml
