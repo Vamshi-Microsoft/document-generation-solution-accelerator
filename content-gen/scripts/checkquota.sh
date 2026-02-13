@@ -41,7 +41,7 @@ IMAGE_MODEL_MIN_CAPACITY="${IMAGE_MODEL_MIN_CAPACITY:-1}"
 if [[ -n "$AZURE_REGIONS" ]]; then
     IFS=', ' read -ra REGIONS <<< "$AZURE_REGIONS"
 else
-    REGIONS=("westus3" "eastus2" "uaenorth" "polandcentral" "swedencentral" "australiaeast" "eastus" "uksouth" "japaneast")
+    REGIONS=("westus3" "eastus2" "uaenorth" "swedencentral" "australiaeast" "eastus" "uksouth" "japaneast")
 fi
 
 # Map image model choice to Azure quota model name
