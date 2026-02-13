@@ -40,7 +40,6 @@ on:
           - 'australiaeast'
           - 'centralus'
           - 'eastasia'
-          - 'eastus2'
           - 'japaneast'
           - 'northeurope'
           - 'southeastasia'
