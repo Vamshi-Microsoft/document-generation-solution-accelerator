@@ -332,7 +332,7 @@ jobs:
             echo "### ✅ Deployment Details" >> $GITHUB_STEP_SUMMARY
             echo "- **Web App URL**: [$WEB_APP_URL]($WEB_APP_URL)" >> $GITHUB_STEP_SUMMARY
             echo "- Successfully deployed to Azure with all resources configured" >> $GITHUB_STEP_SUMMARY
-            echo "- Post-deployment scripts executed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "- All Deployment scripts executed successfully" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
             echo "- Deployment process encountered an error" >> $GITHUB_STEP_SUMMARY
