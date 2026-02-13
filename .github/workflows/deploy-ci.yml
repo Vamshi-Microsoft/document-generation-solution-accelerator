@@ -40,10 +40,14 @@ on:
           - 'australiaeast'
           - 'centralus'
           - 'eastasia'
+          - 'eastus'
           - 'japaneast'
           - 'northeurope'
           - 'southeastasia'
+          - 'swedencentral'
           - 'uksouth'
+          - 'westus'
+          - 'westus3'
       resource_group_name:
         description: 'Resource Group Name (Optional)'
         required: false
